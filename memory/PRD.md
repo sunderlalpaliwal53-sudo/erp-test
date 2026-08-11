@@ -52,6 +52,11 @@ Multi-school ERP (React + FastAPI + MongoDB) for the Stanvard school group: stud
 - BUGFIX (fee collection picker): LKG/other students were missing because the picker hard-capped at the first 200 students. Now lists up to 500, each option shows class, search matches class names, and a class-wise filter dropdown (fee-collect-class-filter) was added.
 - Verified (iterations 12-13): 35/35 backend tests; picker shows all 375 students, LKG filter narrows to 13; no pencil on assignment cards; parent Upcoming Fees populates per-child and refetches on child switch.
 
+## Implemented (2026-08-11, iteration 7) — Picker dropdown + filter persistence (user-reported)
+- Fee Collection: selecting a class now swaps the search popover for a plain student dropdown of that class (fee-collect-class-student-select); switching class clears an out-of-class selection. Added explicit "no fee assignment" empty state when a picked student has no schedule.
+- Students page: class filter (and section filter) now persist via sessionStorage — navigating to a student and coming back keeps the filtered list (also survives reload).
+- Verified (iteration_14): 100% frontend pass — dropdown lists exactly the class's students, class switch resets selection, filter restored after back navigation and hard reload.
+
 ## Known Notes / Backlog
 - P1: server.py is ~4200 lines — split into routers (exams, fees, auth...) for maintainability.
 - P1: report-card.pdf served with Content-Disposition: inline; consider ?download=1 option.

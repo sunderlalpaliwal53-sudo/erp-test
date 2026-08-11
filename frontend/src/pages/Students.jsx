@@ -25,8 +25,10 @@ export default function StudentsPage() {
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);
   const [search, setSearch] = useState('');
-  const [classFilter, setClassFilter] = useState('all');
-  const [sectionFilter, setSectionFilter] = useState('all');
+  const [classFilter, setClassFilter] = useState(() => sessionStorage.getItem('students_class_filter') || 'all');
+  useEffect(() => { sessionStorage.setItem('students_class_filter', classFilter); }, [classFilter]);
+  const [sectionFilter, setSectionFilter] = useState(() => sessionStorage.getItem('students_section_filter') || 'all');
+  useEffect(() => { sessionStorage.setItem('students_section_filter', sectionFilter); }, [sectionFilter]);
   const [loading, setLoading] = useState(false);
   const [openAdd, setOpenAdd] = useState(false);
   const [openImport, setOpenImport] = useState(false);
@@ -131,7 +133,7 @@ export default function StudentsPage() {
                 <TableRow><TableCell colSpan={canEdit ? 7 : 6} className="py-8 text-center text-muted-foreground text-sm">No students found.</TableCell></TableRow>
               )}
               {students.map((s) => (
-                <TableRow key={s.id} className="hover:bg-secondary/40 cursor-pointer" onClick={() => nav(`/students/${s.id}`)}>
+                <TableRow key={s.id} data-testid={`student-row-${s.id}`} className="hover:bg-secondary/40 cursor-pointer" onClick={() => nav(`/students/${s.id}`)}>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar className="h-9 w-9">

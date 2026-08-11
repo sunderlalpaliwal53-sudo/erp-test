@@ -307,7 +307,7 @@ export default function FeeCollection() {
           <Card className="p-5 border-border">
             <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
               <Label>Student</Label>
-              <Select value={classFilter} onValueChange={setClassFilter}>
+              <Select value={classFilter} onValueChange={(v) => { setClassFilter(v); if (selected && v !== 'all' && selected.class_id !== v) setStudentId(''); }}>
                 <SelectTrigger className="w-44 h-9" data-testid="fee-collect-class-filter">
                   <SelectValue placeholder="All Classes" />
                 </SelectTrigger>
@@ -317,6 +317,20 @@ export default function FeeCollection() {
                 </SelectContent>
               </Select>
             </div>
+            {classFilter !== 'all' ? (
+              <Select value={studentId} onValueChange={setStudentId}>
+                <SelectTrigger className="w-full h-11" data-testid="fee-collect-class-student-select">
+                  <SelectValue placeholder={`Select student — ${pickerStudents.length} in ${classMap[classFilter] || 'this class'}`} />
+                </SelectTrigger>
+                <SelectContent>
+                  {pickerStudents.map((s) => (
+                    <SelectItem key={s.id} value={s.id} data-testid={`fee-collect-class-student-${s.id}`}>
+                      {s.full_name} · {s.admission_number}{s.section ? ` · Sec ${s.section}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
             <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
               <PopoverTrigger asChild>
                 <button data-testid="fee-collect-student-picker" className="w-full flex items-center gap-2 h-11 px-3 rounded-md border border-border bg-card hover:bg-secondary text-sm text-left">
@@ -345,12 +359,18 @@ export default function FeeCollection() {
                 </Command>
               </PopoverContent>
             </Popover>
+            )}
             {sched && (
               <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                 <StatMini label="Annual" value={money(sched.annual_total)} />
                 <StatMini label="Paid" value={money(sched.total_paid)} tone="emerald" />
                 <StatMini label="Remaining" value={money(sched.remaining_balance)} tone={sched.remaining_balance > 0 ? 'amber' : 'emerald'} />
                 <StatMini label="Monthly (÷12)" value={money(sched.monthly_amount)} />
+              </div>
+            )}
+            {studentId && !sched && (
+              <div className="mt-3 rounded-md border border-dashed border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground" data-testid="fee-collect-no-schedule">
+                No fee assignment found for this student — assign a fee structure from the student's profile first.
               </div>
             )}
           </Card>
