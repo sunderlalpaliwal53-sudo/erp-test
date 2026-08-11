@@ -59,7 +59,7 @@ export function ImportStudentsDialog({ open, onOpenChange, onDone }) {
               <div><b>{result.created}</b> student(s) imported, <b>{result.skipped}</b> skipped.</div>
               {result.errors?.length > 0 && (
                 <ul className="mt-2 max-h-32 overflow-y-auto text-xs text-muted-foreground list-disc pl-4">
-                  {result.errors.map((e, i) => <li key={i}>{e}</li>)}
+                  {result.errors.map((e) => <li key={e}>{e}</li>)}
                 </ul>
               )}
             </div>

@@ -885,7 +885,6 @@ def _session_months(session: str) -> list:
     out = []
     for i in range(12):
         m = 4 + i  # April=4
-        y = start_year + (0 if m <= 12 else 1)
         m2 = m if m <= 12 else m - 12
         y2 = start_year if m <= 12 else start_year + 1
         label = datetime(y2, m2, 1).strftime('%B %Y')
@@ -3221,7 +3220,6 @@ async def report_monthly_dues_xlsx(request: Request,
     to_yyyymm = _yyyymm(to_date) if to_date else None
 
     def _month_in_range(m):
-        y, mo = m.get('i', 0), 0
         # `label` looks like "April 2026" — parse using calendar
         lbl = (m.get('label') or '').strip()
         try:

@@ -57,6 +57,13 @@ Multi-school ERP (React + FastAPI + MongoDB) for the Stanvard school group: stud
 - Students page: class filter (and section filter) now persist via sessionStorage — navigating to a student and coming back keeps the filtered list (also survives reload).
 - Verified (iteration_14): 100% frontend pass — dropdown lists exactly the class's students, class switch resets selection, filter restored after back navigation and hard reload.
 
+## Implemented (2026-08-11, iteration 8) — Code review fixes applied
+- Hardcoded test credentials moved to env vars (TEST_* / RAZORPAY_WEBHOOK_SECRET) with seeded defaults in tests/test_stanvard_real_seed.py + tests/backend_test.py; stale fallback URL now fails fast.
+- Array-index React keys fixed (Exams.jsx subject rows use crypto.randomUUID uids; ImportStudentsDialog error list keyed by content).
+- Dead variables removed (ruff F841 clean, F821 already clean — 0 undefined vars; the 13 "possibly undefined" and 51 `is`-vs-`==` findings were analyzer false positives: all `is None` idioms).
+- Verified: ruff clean, 28/28 backend tests pass, frontend compiles.
+- DEFERRED (needs user sign-off / separate effort): localStorage→httpOnly-cookie auth migration (architectural, touches live auth), blanket hook-dependency churn (109 mostly intentional eslint-disabled effects — blind edits risk breaking working flows), large component splits (AssignFeeDialog/Reports/Analytics/FeeCollection/backend_test/pdf_utils), nested-ternary rewrites.
+
 ## Known Notes / Backlog
 - P1: server.py is ~4200 lines — split into routers (exams, fees, auth...) for maintainability.
 - P1: report-card.pdf served with Content-Disposition: inline; consider ?download=1 option.

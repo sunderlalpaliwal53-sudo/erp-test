@@ -22,19 +22,23 @@ import re
 import pytest
 import requests
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://erp-functional-qa-1.preview.emergentagent.com').rstrip('/')
+_base = os.environ.get('REACT_APP_BACKEND_URL')
+if not _base:
+    raise RuntimeError('Set REACT_APP_BACKEND_URL to run these tests')
+BASE_URL = _base.rstrip('/')
 API = f"{BASE_URL}/api"
 
+# Test credentials come from the environment (fall back to seeded demo values).
 CREDS = {
-    'super_admin':  ('superadmin@stanvard.school', 'Stanvard@2026'),
-    'school_admin': ('admin@stanvard.school',      'Admin@2026'),
-    'accountant':   ('accountant@stanvard.school', 'Accountant@2026'),
-    'teacher':      ('teacher@stanvard.school',    'Teacher@2026'),
-    'parent_multi': ('6376066570',                 '066570'),
-    'parent_single':('9079111899',                 '111899'),
+    'super_admin':  (os.environ.get('TEST_SUPER_EMAIL', 'superadmin@stanvard.school'), os.environ.get('TEST_SUPER_PASS', 'Stanvard@2026')),
+    'school_admin': (os.environ.get('TEST_ADMIN_EMAIL', 'admin@stanvard.school'), os.environ.get('TEST_ADMIN_PASS', 'Admin@2026')),
+    'accountant':   (os.environ.get('TEST_ACCT_EMAIL', 'accountant@stanvard.school'), os.environ.get('TEST_ACCT_PASS', 'Accountant@2026')),
+    'teacher':      (os.environ.get('TEST_TEACHER_EMAIL', 'teacher@stanvard.school'), os.environ.get('TEST_TEACHER_PASS', 'Teacher@2026')),
+    'parent_multi': (os.environ.get('TEST_PARENT_EMAIL', '6376066570'), os.environ.get('TEST_PARENT_PASS', '066570')),
+    'parent_single':(os.environ.get('TEST_PARENT2_EMAIL', '9079111899'), os.environ.get('TEST_PARENT2_PASS', '111899')),
 }
 
-MOCK_SECRET = 'mock_secret_stanvard'
+MOCK_SECRET = os.environ.get('RAZORPAY_WEBHOOK_SECRET', 'mock_secret_stanvard')
 
 
 # ------------------------ shared helpers/fixtures ------------------------

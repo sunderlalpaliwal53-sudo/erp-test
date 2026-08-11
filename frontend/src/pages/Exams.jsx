@@ -142,7 +142,7 @@ export default function ExamsPage() {
 function AddExam({ open, onOpenChange, classes, onSaved }) {
   const empty = { name: '', term: '', class_id: '', section: 'all', exam_date: '', academic_session: '2025-26' };
   const [form, setForm] = useState(empty);
-  const [subjects, setSubjects] = useState([{ name: '', max_marks: 100 }]);
+  const [subjects, setSubjects] = useState([{ uid: crypto.randomUUID(), name: '', max_marks: 100 }]);
   const [saving, setSaving] = useState(false);
   const setSubj = (i, k, v) => setSubjects(subjects.map((s, j) => (j === i ? { ...s, [k]: v } : s)));
 
@@ -157,7 +157,7 @@ function AddExam({ open, onOpenChange, classes, onSaved }) {
       await api.post('/exams', payload);
       toast.success('Exam created');
       onOpenChange(false); onSaved();
-      setForm(empty); setSubjects([{ name: '', max_marks: 100 }]);
+      setForm(empty); setSubjects([{ uid: crypto.randomUUID(), name: '', max_marks: 100 }]);
     } catch (err) { toast.error(err.response?.data?.detail || 'Failed'); }
     finally { setSaving(false); }
   };
@@ -199,7 +199,7 @@ function AddExam({ open, onOpenChange, classes, onSaved }) {
           <div className="grid gap-2">
             <Label>Subjects &amp; Max Marks</Label>
             {subjects.map((s, i) => (
-              <div key={i} className="flex gap-2 items-center">
+              <div key={s.uid} className="flex gap-2 items-center">
                 <Input data-testid={`exam-subject-name-${i}`} placeholder={`Subject ${i + 1}`} value={s.name} onChange={(e) => setSubj(i, 'name', e.target.value)} />
                 <Input data-testid={`exam-subject-max-${i}`} type="number" min="1" className="w-28" value={s.max_marks} onChange={(e) => setSubj(i, 'max_marks', e.target.value)} />
                 <Button type="button" variant="ghost" size="sm" onClick={() => setSubjects(subjects.filter((_, j) => j !== i))} disabled={subjects.length === 1}>
@@ -207,7 +207,7 @@ function AddExam({ open, onOpenChange, classes, onSaved }) {
                 </Button>
               </div>
             ))}
-            <Button type="button" variant="outline" size="sm" data-testid="exam-add-subject" className="w-fit gap-1" onClick={() => setSubjects([...subjects, { name: '', max_marks: 100 }])}>
+            <Button type="button" variant="outline" size="sm" data-testid="exam-add-subject" className="w-fit gap-1" onClick={() => setSubjects([...subjects, { uid: crypto.randomUUID(), name: '', max_marks: 100 }])}>
               <Plus className="h-3.5 w-3.5" /> Add Subject
             </Button>
           </div>

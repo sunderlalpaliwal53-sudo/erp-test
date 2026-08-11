@@ -26,12 +26,12 @@ if not base_url:
     raise RuntimeError("REACT_APP_BACKEND_URL is missing")
 BASE_URL = base_url.rstrip("/") + "/api"
 
-ADMIN_EMAIL = "admin.gn@stanvard.school"
-ADMIN_PASSWORD = "admin123"
-PARENT_EMAIL = "parent.gn20250001@stanvard.school"
-PARENT_PASSWORD = "parent123"
-SUPER_EMAIL = "superadmin@stanvard.school"
-SUPER_PASSWORD = "super123"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin.gn@stanvard.school")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASS", "admin123")
+PARENT_EMAIL = os.environ.get("TEST_PARENT_EMAIL", "parent.gn20250001@stanvard.school")
+PARENT_PASSWORD = os.environ.get("TEST_PARENT_PASS", "parent123")
+SUPER_EMAIL = os.environ.get("TEST_SUPER_EMAIL", "superadmin@stanvard.school")
+SUPER_PASSWORD = os.environ.get("TEST_SUPER_PASS", "super123")
 
 
 # ------------------------------ fixtures ------------------------------
