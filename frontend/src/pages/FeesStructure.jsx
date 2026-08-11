@@ -76,15 +76,17 @@ function computeBreakdown(form) {
   let netTotal = 0;
   const perMonth = MONTHS.map((m) => {
     const ot = oneTimeByMonth[m.n] || 0;
-    if (EXCLUDED_MONTHS.includes(m.n) && ot <= 0) return { month: m.n, label: m.l, net: 0, discount: 0, noFee: true, override: false, oneTime: 0 };
     const hasOverride = overrideMap[m.n] !== undefined;
+    // June & March default to ₹0 / No Fee — UNLESS the user overrides them.
+    if (EXCLUDED_MONTHS.includes(m.n) && ot <= 0 && !hasOverride) return { month: m.n, label: m.l, net: 0, discount: 0, noFee: true, override: false, oneTime: 0 };
     const base = hasOverride ? overrideMap[m.n] : (EXCLUDED_MONTHS.includes(m.n) ? 0 : baseMonth);
     const md = mdMap[m.n];
     const d = (!hasOverride && md && !EXCLUDED_MONTHS.includes(m.n)) ? discAmt(md.type, md.value, base) : 0;
     monthTotal += d;
     const net = Math.max(+(base - d + ot).toFixed(2), 0);
     netTotal += net;
-    return { month: m.n, label: m.l, net, discount: +d.toFixed(2), override: hasOverride, oneTime: +ot.toFixed(2) };
+    // A zero override on a collection month = month skipped (No Fee).
+    return { month: m.n, label: m.l, net, discount: +d.toFixed(2), override: hasOverride, oneTime: +ot.toFixed(2), noFee: net <= 0 };
   });
   const netAnnual = +netTotal.toFixed(2);
   const totalDisc = Math.max(+(grossAll - netAnnual).toFixed(2), 0);
@@ -651,23 +653,22 @@ function FeePlanDialog({ state, onOpenChange, heads, classes, onSaved }) {
               </div>
               <div className="mt-3">
                 <div className="flex items-center justify-between mb-1.5">
-                  <Label className="text-xs">Monthly amounts — total ÷ 10 months (June &amp; March excluded). Edit any month to override.</Label>
+                  <Label className="text-xs">Monthly amounts — total ÷ 10 months (June &amp; March default ₹0 / No Fee). Edit any month to override; set 0 to skip a month, or add an amount in June/March to charge them.</Label>
                   {(form.month_amounts || []).length > 0 && (
                     <Button type="button" size="sm" variant="ghost" className="h-6 text-[11px]" onClick={clearMonthAmounts} data-testid="reset-month-amounts">Reset to auto</Button>
                   )}
                 </div>
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                   {bd.perMonth.map((m) => (
-                    <div key={m.month} className={`rounded-md border p-1.5 text-center ${m.noFee ? 'border-dashed border-border bg-muted/40' : m.override ? 'border-[#FCD34D] bg-[#FFFBEB]' : m.discount > 0 ? 'border-[#A7F3D0] bg-[#ECFDF5]' : 'border-border'}`} data-testid={`preview-month-${m.month}`}>
+                    <div key={m.month} className={`rounded-md border p-1.5 text-center ${m.noFee && !m.override ? 'border-dashed border-border bg-muted/40' : m.override ? 'border-[#FCD34D] bg-[#FFFBEB]' : m.discount > 0 ? 'border-[#A7F3D0] bg-[#ECFDF5]' : 'border-border'}`} data-testid={`preview-month-${m.month}`}>
                       <div className="text-[10px] text-muted-foreground">{MONTH_LABEL[m.month].slice(0, 3)}</div>
-                      {m.noFee ? (
-                        <div className="text-[10px] text-muted-foreground py-1.5">No Fee</div>
-                      ) : (
-                        <Input type="number" data-testid={`month-amount-${m.month}`}
-                          className="h-7 px-1 text-xs tabular-nums text-center"
-                          value={m.net}
-                          onChange={(e) => setMonthAmount(m.month, e.target.value)} />
-                      )}
+                      <Input type="number" min="0" data-testid={`month-amount-${m.month}`}
+                        className="h-7 px-1 text-xs tabular-nums text-center"
+                        placeholder="0"
+                        value={m.override ? m.net : (m.noFee ? '' : m.net)}
+                        onChange={(e) => setMonthAmount(m.month, e.target.value)} />
+                      {m.noFee && !m.override && <div className="text-[9px] text-muted-foreground">No Fee</div>}
+                      {m.noFee && m.override && <div className="text-[9px] text-[#B45309]">Skipped</div>}
                       {!m.noFee && m.discount > 0 && <div className="text-[9px] text-[#0F766E]">-{money(m.discount)}</div>}
                     </div>
                   ))}

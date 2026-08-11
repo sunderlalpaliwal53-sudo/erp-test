@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api, money } from '@/lib/api';
 import { planDiscountBreakdown } from '@/lib/feeCalc';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -97,6 +97,9 @@ export function AssignFeeDialog({
   const [copyingPrev, setCopyingPrev] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [prevAssignment, setPrevAssignment] = useState(null);
+  // The MAIN fee structure's 12-month timeline for the selected plan — the
+  // source of truth this dialog syncs to (fixes plan vs assignment mismatch).
+  const [planTimeline, setPlanTimeline] = useState(null);
 
   // ------ hydrate on open ------
   useEffect(() => {
@@ -122,8 +125,10 @@ export function AssignFeeDialog({
       setCollectionMonths(existingAssignment.collection_months && existingAssignment.collection_months.length
         ? existingAssignment.collection_months : DEFAULT_COLLECTION_MONTHS);
       setInstallments((existingAssignment.installments || []).map((i) => ({ ...i })));
-      // Preserve the saved installment amounts — skip the next auto-rebuild.
-      skipRebuildRef.current = (existingAssignment.installments || []).length ? 1 : 0;
+      // Plan-mode assignments must SYNC with the main fee structure, so only
+      // skip the auto-rebuild for CUSTOM assignments (no plan to sync from).
+      skipRebuildRef.current = (existingAssignment.custom_items?.length && (existingAssignment.installments || []).length) ? 1 : 0;
+      monthsHydratedRef.current = !!(existingAssignment.collection_months && existingAssignment.collection_months.length);
     } else {
       setMode('plan'); setPlanId(''); setItems([]); setSession('2026-27');
       setDiscountKind('none'); setDiscountPercent(0); setDiscountAmountInput(0);
@@ -132,6 +137,7 @@ export function AssignFeeDialog({
       setCollectionMonths(DEFAULT_COLLECTION_MONTHS);
       setInstallments([]);
       skipRebuildRef.current = 0;
+      monthsHydratedRef.current = false;
     }
     setPlanSearch(''); setErrors({}); setPreviewOpen(false); setPrevAssignment(null);
   }, [existingAssignment, open]);
@@ -193,20 +199,102 @@ export function AssignFeeDialog({
 
   const monthlyAmount = useMemo(() => {
     if (isOneTimeOnly) return Math.round(netPayable * 100) / 100;
+    // Plan mode: show the most-common ACTIVE timeline amount (syncs with the
+    // main structure instead of an abstract equal split).
+    if (mode === 'plan' && planTimeline) {
+      const active = installments.filter((r) => r.status === 'active' && Number(r.amount) > 0);
+      if (active.length) {
+        const freq = {};
+        active.forEach((r) => { const v = Math.round(Number(r.amount) * 100) / 100; freq[v] = (freq[v] || 0) + 1; });
+        const top = Object.entries(freq).sort((a, b) => b[1] - a[1])[0];
+        if (top) return Number(top[0]);
+      }
+    }
     const n = activeCollectionMonths.length || 1;
     return Math.round((recurringNet / n) * 100) / 100;
-  }, [recurringNet, activeCollectionMonths, isOneTimeOnly, netPayable]);
+  }, [recurringNet, activeCollectionMonths, isOneTimeOnly, netPayable, mode, planTimeline, installments]);
 
   const firstActiveMonth = activeCollectionMonths.length ? activeCollectionMonths[0] : null;
 
   // Skip ONE automatic rebuild right after hydrating an existing assignment so
   // its saved installment amounts are preserved.
   const skipRebuildRef = React.useRef(0);
+  // True when the collection-month selection came from a saved assignment —
+  // then we don't overwrite it with the plan's default months.
+  const monthsHydratedRef = React.useRef(false);
+
+  // ------ fetch the MAIN structure's monthly timeline for the selected plan ------
+  useEffect(() => {
+    if (!open || mode !== 'plan' || !planId) { setPlanTimeline(null); return; }
+    let cancelled = false;
+    api.get(`/fees/plans/${planId}/installments`, { params: { session } })
+      .then(({ data }) => {
+        if (cancelled) return;
+        const rows = data.installments || [];
+        setPlanTimeline(rows);
+        if (!monthsHydratedRef.current) {
+          setCollectionMonths(
+            rows.filter((r) => (r.status || 'active') !== 'skip' && Number(r.amount || 0) > 0)
+              .map((r) => Number(r.month)),
+          );
+        }
+      })
+      .catch(() => { if (!cancelled) setPlanTimeline(null); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, mode, planId, session]);
 
   // ------ rebuild the installment table whenever inputs change ------
   useEffect(() => {
     if (!open) return;
     if (skipRebuildRef.current > 0) { skipRebuildRef.current -= 1; return; }
+    // PLAN MODE with the structure timeline loaded: build the student's
+    // timeline FROM the main fee structure (per-month amounts, overrides,
+    // June/March rules), scaled by this student's personal concession so the
+    // annual total still equals Net Payable. This keeps the student
+    // assignment in sync with the main fee structure.
+    if (mode === 'plan' && planTimeline && !isOneTimeOnly) {
+      const freq = {};
+      planTimeline.forEach((r) => {
+        if ((r.status || 'active') === 'skip') return;
+        const v = Math.round(Number(r.amount || 0) * 100) / 100;
+        if (v > 0) freq[v] = (freq[v] || 0) + 1;
+      });
+      const top = Object.entries(freq).sort((a, b) => b[1] - a[1])[0];
+      const typical = top ? Number(top[0]) : 0;
+      const rawFor = (m) => {
+        if (!collectionMonths.includes(m)) return 0;
+        const pr = planTimeline.find((r) => Number(r.month) === m);
+        if (pr && (pr.status || 'active') !== 'skip' && Number(pr.amount || 0) > 0) return Number(pr.amount);
+        return typical; // user re-enabled a No-Fee month (e.g. June) — charge a typical month
+      };
+      const rawTotal = MONTH_ORDER.reduce((s, m) => s + rawFor(m), 0);
+      const factor = rawTotal > 0 ? netPayable / rawTotal : 0;
+      const rows = MONTH_ORDER.map((m) => {
+        const { year, month } = ymFor(m, session);
+        const raw = rawFor(m);
+        const isActive = raw > 0;
+        const lastDay = lastDayOfMonth(year, month);
+        return {
+          month, year,
+          amount: isActive ? Math.round(raw * factor * 100) / 100 : 0,
+          due_date: isActive ? toIso(year, month, Math.min(dueDay, lastDay)) : null,
+          last_payment_date: isActive ? toIso(year, month, lastDay) : null,
+          label: isActive ? null : (m === 6 ? 'Summer Vacation' : m === 3 ? 'Session End' : null),
+          status: isActive ? 'active' : 'skip',
+        };
+      });
+      // Absorb rounding remainder into the last active month (total == netPayable).
+      const activeRows = rows.filter((r) => r.status === 'active');
+      if (activeRows.length) {
+        const sum = activeRows.reduce((s, r) => s + r.amount, 0);
+        const diff = Math.round((netPayable - sum) * 100) / 100;
+        const last = activeRows[activeRows.length - 1];
+        last.amount = Math.round((last.amount + diff) * 100) / 100;
+      }
+      setInstallments(rows);
+      return;
+    }
     const active = MONTH_ORDER.filter((m) => collectionMonths.includes(m));
     const n = active.length;
     const first = n ? active[0] : null;
@@ -237,7 +325,7 @@ export function AssignFeeDialog({
       };
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, session, dueDay, collectionMonths, netPayable, recurringNet, oneTimeNet, isOneTimeOnly]);
+  }, [open, session, dueDay, collectionMonths, netPayable, recurringNet, oneTimeNet, isOneTimeOnly, mode, planTimeline]);
 
   const toggleCollectionMonth = (m) => {
     setCollectionMonths((prev) => prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]);
@@ -391,6 +479,7 @@ export function AssignFeeDialog({
           className="max-w-[1200px] w-[97vw] max-h-[92vh] p-0 border-border rounded-xl overflow-hidden flex flex-col gap-0"
           data-testid="assign-fee-dialog"
         >
+          <DialogTitle className="sr-only">Assign Fees</DialogTitle>
           {/* ------------- Header ------------- */}
           <div className="px-6 py-4 flex items-start justify-between gap-4 border-b border-border bg-white shrink-0">
             <div className="flex items-start gap-3">
@@ -480,7 +569,7 @@ export function AssignFeeDialog({
                             <button
                               key={p.id}
                               type="button"
-                              onClick={() => { setPlanId(p.id); setPlanPickerOpen(false); }}
+                              onClick={() => { setPlanId(p.id); setPlanPickerOpen(false); monthsHydratedRef.current = false; }}
                               className={`w-full text-left px-3 py-2.5 hover:bg-secondary transition-colors border-b border-border/50 last:border-0 ${p.id === planId ? 'bg-secondary' : ''}`}
                               data-testid={`plan-option-${p.id}`}
                             >
@@ -1132,6 +1221,7 @@ function ParentPreviewDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg" data-testid="parent-preview-dialog">
+        <DialogTitle className="sr-only">Parent portal fee preview</DialogTitle>
         <div className="border-b border-border pb-3 mb-3">
           <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">Parent Portal — Preview</div>
           <div className="h-font text-lg font-semibold mt-0.5">Fee Structure — {session}</div>

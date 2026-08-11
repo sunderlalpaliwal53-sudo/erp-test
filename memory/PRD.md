@@ -20,6 +20,14 @@ Multi-school ERP (React + FastAPI + MongoDB) for the Stanvard school group: stud
 
 ## Testing
 - iteration_5.json: 17/17 backend pytest + full Playwright pass (exams CRUD, marks entry, results/ranks/grades, report card PDF, parent 403/200 scoping, CSV import, regression smoke on Dashboard/Students/Receipts/Attendance, parent portal results).
+- iteration_6.json: real-data reseed verified — 375 students (KNP), 23/23 backend tests, parent mobile login, exam module re-verified against real data.
+- iteration_7.json: fee structure changes — 4/4 new backend tests + 23/23 regression + UI pass.
+
+## Implemented (2026-08-11, iteration 2) — Fee structure changes
+- Main fee plan: monthly grid now editable for ALL 12 months. June & March default to ₹0/"No Fee" but accept amounts (amber override cells); setting any collection month to 0 skips it. Backend `_build_plan_installments` honors overrides for June/March and treats zero-overrides as skip.
+- New endpoint: GET /api/fees/plans/{id}/installments — the plan's 12-month timeline (source of truth).
+- BUGFIX (plan vs student assignment clash): AssignFeeDialog now builds the student's timeline FROM the plan's timeline (scaled by the student's personal concession so the total == Net Payable), edit mode no longer shows stale saved installments for plan-based assignments, and collection months auto-sync from the plan.
+- Verified: student timeline sum == Net Payable (₹24,500 = 10 × ₹2,450), June/March No Fee in plan editor, student dialog and parent portal.
 
 ## Known Notes / Backlog
 - P1: server.py is ~4200 lines — split into routers (exams, fees, auth...) for maintainability.

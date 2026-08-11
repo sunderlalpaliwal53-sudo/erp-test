@@ -1,0 +1,34 @@
+{
+  "summary": "Verified Fee Structure changes (Issue 1: June/March editable + arbitrary month skip via zero override; Issue 2: student fee-assignment now syncs with main plan timeline). Backend: 4/4 NEW pytest in test_fee_plan_month_overrides.py PASS — POST /api/fees/plans with month_amounts overrides for June (₹2500 charge) and May (₹0 skip) creates a plan whose GET /api/fees/plans/{id}/installments returns exactly: March=skip/₹0, May=skip/₹0, June=active/₹2500, 9 other months active/₹5000 each — total ₹47,500. Plain 50000 plan yields 10x₹5000 with June & March skip. Overrides persist on the plan doc. RBAC enforced (unauth => 401). Existing regression suite backend/tests/test_stanvard_real_seed.py 23/23 PASS after fixing REACT_APP_BACKEND_URL env. Frontend Playwright as admin@stanvard.school: (Issue 1 UI) Add Fee Plan dialog — Tuition Fee 50000 monthly item → all 12 month-amount-N inputs editable, June(6)/March(3) show blank+placeholder 0 with 'No Fee' caption, other months prefilled ₹5000. Typing 2500 into June turns cell amber and Net annual goes ₹50,000 → ₹47,500 (with -₹2,500 shown as 'Total discount'), Monthly summary refreshes. Typing 0 into May shows 'Skipped' caption. Save → reopen → June=2500, May=0 both persisted; deleted TEST plan cleanly. (Issue 2 sync UI) Opened existing plan-based assignment for KNP student, switched to 'Use Existing Fee Plan' → Class II — FY 2026-27 Tuition Plan → Net Payable ₹24,500, Monthly Installment ₹2,450, timeline shows installment-amount-4..12,1,2 = ₹2450 each (10 rows, June+March omitted), sum = ₹24,500 exactly = Net Payable → structure↔student are in sync. (Regression) Parent portal /parent/pay for mobile 6376066570 shows April Paid, May Partial, June 2026 = 'No fee this month', March 2027 = 'No fee this month'. Dashboard, Students (375 rows), Fee Structures (13 seeded plans) all load without errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AssignFeeDialog (assign-fee-dialog)", "issues": ["Console warning: '`DialogContent` requires a `DialogTitle` for the component to be accessible for screen reader users' — repeat of iter6 a11y note; add DialogTitle (can wrap with VisuallyHidden) to keep same visual design."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_fee_plan_month_overrides.py",
+    "/app/test_reports/pytest/fee_plan_month_overrides.xml",
+    "/app/backend/tests/test_stanvard_real_seed.py"
+  ],
+  "action_items": [
+    "MINOR a11y: Add DialogTitle to AssignFeeDialog and Exam Results/Marks dialogs (repeat) to silence Radix a11y warnings.",
+    "OPTIONAL: Hard-coded fallback URL in backend/tests/test_stanvard_real_seed.py (line 25) still points at old preview host; either drop the fallback (system rule) or update to current env — currently only works when REACT_APP_BACKEND_URL is exported."
+  ],
+  "critical_code_review_comments": [
+    "server.py _build_plan_installments is well-scoped and now correctly honours overrides for excluded months and zero-overrides as skips — matches semantics documented for the PATCH.",
+    "GET /api/fees/plans/{plan_id}/installments 403s cross-school correctly; new endpoint has proper RBAC and 404 handling.",
+    "AssignFeeDialog's plan-mode timeline correctly hydrates from /installments and scales by student concession — verified in UI (sum == Net Payable).",
+    "server.py still ~4270 lines (grew slightly); router splitting still recommended (repeat feedback from iter 4/5/6)."
+  ],
+  "updated_files": ["/app/backend/tests/test_fee_plan_month_overrides.py"],
+  "success_rate": {"backend": "100% (4/4 new + 23/23 regression)", "frontend": "100% for tested flows"},
+  "test_credentials": "admin@stanvard.school/Admin@2026 (KNP school_admin), parent mobile 6376066570/066570 verified.",
+  "seed_data_creation": "TEST_UI_Overrides_Plan draft plan was created and DELETED via UI within same test. Backend test also creates TEST_* plans and cleans them up in teardown_module. Real seed data untouched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Two backend suites live under /app/backend/tests/: test_stanvard_real_seed.py (23 tests, generic regression) and NEW test_fee_plan_month_overrides.py (4 tests, targets Issue 1 semantics + Issue 2 endpoint). Both pass with REACT_APP_BACKEND_URL=https://enterprise-ops-66.preview.emergentagent.com. Frontend testids for the plan dialog: add-fee-plan, plan-name, new-item-head (Select — click, then role=option), new-item-amount, add-item-btn, month-amount-{1..12}, preview-month-{1..12}, save-plan, edit-plan-{id}, delete-plan-{id}. AssignFeeDialog testids: assign-fee-dialog, assign-fee-plan-select, plan-option-{id}, installment-amount-{month} (input for active months, absent for June/March), assign-summary-net, assign-summary-gross. When testing sync path, note real-seed assignments show up in Custom Fee Items mode by default even when a plan is active — you must click 'Use Existing Fee Plan' to view the plan-synced timeline. June (month 6) and March (month 3) do NOT get installment rows in the AssignFeeDialog timeline when they are skipped — this is by design; the plan dialog does show all 12 editable cells.",
+  "rca of the issue": "Original bug 'clash between main fee structure and student fee assignment': RCA was that AssignFeeDialog rebuilt installments from saved data OR did an internal equal-split of the netPayable without consulting the actual plan's per-month timeline, so if the plan had month_amounts overrides or the student had concession, the two views showed different numbers. Fix (already applied by main agent): AssignFeeDialog now fetches GET /api/fees/plans/{plan_id}/installments, scales each active month by (netPayable / planTimelineTotal), and edit-mode drops stale saved installments for plan-based assignments. Verified via UI that timeline sum matches Net Payable exactly (₹24,500 = 10 × ₹2,450) and June/March correctly show as No Fee both in the plan editor and the student's assignment dialog."
+}

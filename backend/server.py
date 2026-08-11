@@ -528,16 +528,23 @@ def _build_plan_installments(plan: dict, session: str) -> list:
     installments = []
     for m in months:
         one_time_here = one_time_by_month.get(m['month'], 0.0)
-        if m['month'] in FEE_EXCLUDED_MONTHS and one_time_here <= 0:
+        has_override = m['month'] in override_by_month
+        if m['month'] in FEE_EXCLUDED_MONTHS and one_time_here <= 0 and not has_override:
             installments.append({'month': m['month'], 'year': m['year'], 'amount': 0.0,
                                  'status': 'skip', 'label': 'No Fee',
                                  'due_date': f"{m['year']}-{m['month']:02d}-15"})
         else:
             amt = override_by_month.get(m['month'], net_by_month.get(m['month'], 0.0))
             amt = round(float(amt) + one_time_here, 2)
-            installments.append({'month': m['month'], 'year': m['year'],
-                                 'amount': amt, 'status': 'active',
-                                 'due_date': f"{m['year']}-{m['month']:02d}-15"})
+            if amt <= 0:
+                # Explicit zero override (or zero computed amount) = month skipped.
+                installments.append({'month': m['month'], 'year': m['year'], 'amount': 0.0,
+                                     'status': 'skip', 'label': 'No Fee',
+                                     'due_date': f"{m['year']}-{m['month']:02d}-15"})
+            else:
+                installments.append({'month': m['month'], 'year': m['year'],
+                                     'amount': amt, 'status': 'active',
+                                     'due_date': f"{m['year']}-{m['month']:02d}-15"})
     return installments
 
 
@@ -680,6 +687,22 @@ async def delete_fee_plan(plan_id: str, current=Depends(get_current_user)):
     await log_audit(action='fee_plan.delete', current_user=current,
                     entity_type='fee_plan', entity_id=plan_id, details={'name': plan.get('name')})
     return {'ok': True}
+
+
+@api.get('/fees/plans/{plan_id}/installments')
+async def plan_installments(plan_id: str, current=Depends(get_current_user),
+                            session: Optional[str] = None):
+    """Return the plan's 12-month installment timeline (the MAIN fee structure's
+    per-month amounts): 10-month split by default with June & March at ₹0,
+    honouring per-month overrides, plan discounts and one-time charges.
+    Used by the student Assign-Fee dialog to stay in sync with the structure."""
+    plan = await fee_plans_col.find_one({'id': plan_id}, {'_id': 0})
+    if not plan:
+        raise HTTPException(404, 'Plan not found')
+    if current['role'] != 'super_admin' and plan['school_id'] != current.get('school_id'):
+        raise HTTPException(403, 'Forbidden')
+    sess = session or plan.get('academic_session') or '2026-27'
+    return {'session': sess, 'installments': _build_plan_installments(plan, sess)}
 
 
 @api.post('/fees/plans/{plan_id}/assign', dependencies=[Depends(require_roles('super_admin', 'school_admin'))])
