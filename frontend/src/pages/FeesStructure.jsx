@@ -16,7 +16,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Pencil, Tag } from 'lucide-react';
+import { Plus, Trash2, Pencil, Tag, BadgeCheck, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSchool } from '@/contexts/SchoolContext';
 
@@ -121,6 +121,7 @@ export default function FeesStructure() {
   const [headDialog, setHeadDialog] = useState({ open: false, initial: null });
   const [planDialog, setPlanDialog] = useState({ open: false, initial: null });
   const [confirm, setConfirm] = useState({ open: false, kind: null, item: null });
+  const [postSave, setPostSave] = useState({ open: false, plan: null });
 
   const load = useCallback(async () => {
     if (!activeSchoolId) return;
@@ -287,7 +288,9 @@ export default function FeesStructure() {
       </Tabs>
 
       <FeeHeadDialog state={headDialog} onOpenChange={(o) => setHeadDialog((s) => ({ ...s, open: o }))} onSaved={load} />
-      <FeePlanDialog state={planDialog} onOpenChange={(o) => setPlanDialog((s) => ({ ...s, open: o }))} heads={heads} classes={classes} onSaved={load} />
+      <FeePlanDialog state={planDialog} onOpenChange={(o) => setPlanDialog((s) => ({ ...s, open: o }))} heads={heads} classes={classes}
+        onSaved={(saved) => { load(); if (saved?.id) setPostSave({ open: true, plan: saved }); }} />
+      <PostSaveDialog state={postSave} onOpenChange={(o) => setPostSave((s) => ({ ...s, open: o }))} onDone={load} />
 
       <AlertDialog open={confirm.open} onOpenChange={(o) => setConfirm((s) => ({ ...s, open: o }))}>
         <AlertDialogContent>
@@ -440,11 +443,28 @@ function FeePlanDialog({ state, onOpenChange, heads, classes, onSaved }) {
   }));
 
   // Override a single month's payable amount (empty = revert to auto split).
-  const setMonthAmount = (month, v) => setForm((f) => {
-    const others = (f.month_amounts || []).filter((o) => Number(o.month) !== Number(month));
-    if (v === '' || v === null || v === undefined) return { ...f, month_amounts: others };
-    return { ...f, month_amounts: [...others, { month: Number(month), amount: Number(v || 0) }] };
-  });
+  // The typed value is the TOTAL for that month. When one-time fee heads land
+  // in the month, the month's amount can NEVER go below their sum (floor) but
+  // may increase freely; the stored override is only the recurring part
+  // (typed - oneTime), so one-time fees are never double-counted.
+  const setMonthAmount = (month, v, oneTime = 0) => {
+    const floor = Number(oneTime || 0);
+    if (v !== '' && v !== null && v !== undefined) {
+      const t = Number(v);
+      if (!Number.isNaN(t) && t < floor) {
+        toast.warning(`This month includes ${money(floor)} of one-time fees — the amount can't go below that.`);
+        v = String(floor);
+      }
+    }
+    setForm((f) => {
+      const others = (f.month_amounts || []).filter((o) => Number(o.month) !== Number(month));
+      if (v === '' || v === null || v === undefined) return { ...f, month_amounts: others };
+      const typed = Number(v);
+      if (Number.isNaN(typed)) return f;
+      const recurring = Math.max(+(typed - floor).toFixed(2), 0);
+      return { ...f, month_amounts: [...others, { month: Number(month), amount: recurring }] };
+    });
+  };
   const clearMonthAmounts = () => setForm((f) => ({ ...f, month_amounts: [] }));
 
   const bd = computeBreakdown(form);
@@ -474,7 +494,7 @@ function FeePlanDialog({ state, onOpenChange, heads, classes, onSaved }) {
       }
       const n = res?.data?.assigned_students || 0;
       toast.success(`${isEdit ? 'Fee plan updated' : 'Fee plan added'}${n > 0 ? ` — auto-assigned to ${n} student${n > 1 ? 's' : ''}` : ''}`);
-      onOpenChange(false); onSaved();
+      onOpenChange(false); onSaved(res?.data);
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed');
     } finally { setSaving(false); }
@@ -662,11 +682,12 @@ function FeePlanDialog({ state, onOpenChange, heads, classes, onSaved }) {
                   {bd.perMonth.map((m) => (
                     <div key={m.month} className={`rounded-md border p-1.5 text-center ${m.noFee && !m.override ? 'border-dashed border-border bg-muted/40' : m.override ? 'border-[#FCD34D] bg-[#FFFBEB]' : m.discount > 0 ? 'border-[#A7F3D0] bg-[#ECFDF5]' : 'border-border'}`} data-testid={`preview-month-${m.month}`}>
                       <div className="text-[10px] text-muted-foreground">{MONTH_LABEL[m.month].slice(0, 3)}</div>
-                      <Input type="number" min="0" data-testid={`month-amount-${m.month}`}
+                      <Input type="number" min={m.oneTime || 0} data-testid={`month-amount-${m.month}`}
                         className="h-7 px-1 text-xs tabular-nums text-center"
                         placeholder="0"
                         value={m.override ? m.net : (m.noFee ? '' : m.net)}
-                        onChange={(e) => setMonthAmount(m.month, e.target.value)} />
+                        onChange={(e) => setMonthAmount(m.month, e.target.value, m.oneTime)} />
+                      {m.oneTime > 0 && <div className="text-[9px] text-muted-foreground">incl. {money(m.oneTime)} one-time</div>}
                       {m.noFee && !m.override && <div className="text-[9px] text-muted-foreground">No Fee</div>}
                       {m.noFee && m.override && <div className="text-[9px] text-[#B45309]">Skipped</div>}
                       {!m.noFee && m.discount > 0 && <div className="text-[9px] text-[#0F766E]">-{money(m.discount)}</div>}
@@ -681,6 +702,78 @@ function FeePlanDialog({ state, onOpenChange, heads, classes, onSaved }) {
             <Button type="submit" data-testid="save-plan" disabled={saving}>{saving ? 'Saving…' : (isEdit ? 'Save Changes' : 'Add Plan')}</Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// -------------------------------------------------------------------
+// Post-save dialog: Set Live to students OR Copy as Draft
+// -------------------------------------------------------------------
+function PostSaveDialog({ state, onOpenChange, onDone }) {
+  const plan = state.plan;
+  const [busy, setBusy] = useState(false);
+  if (!plan) return null;
+  const isLive = plan.status === 'live';
+  const hasClass = !!plan.class_id;
+
+  const setLiveNow = async () => {
+    setBusy(true);
+    try {
+      const { data } = await api.post(`/fees/plans/${plan.id}/set-live`);
+      const n = data?.assigned_students || 0;
+      toast.success(`"${plan.name}" is now LIVE — applied to ${n} student${n === 1 ? '' : 's'}`);
+      onOpenChange(false); onDone();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Could not set live');
+    } finally { setBusy(false); }
+  };
+
+  const copyAsDraft = async () => {
+    setBusy(true);
+    try {
+      const { data } = await api.post(`/fees/plans/${plan.id}/duplicate`);
+      toast.success(`Draft copy "${data?.name}" created — edit it without affecting students`);
+      onOpenChange(false); onDone();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Could not create draft copy');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Dialog open={state.open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md" data-testid="postsave-dialog">
+        <DialogHeader>
+          <DialogTitle>Fee structure saved</DialogTitle>
+          <DialogDescription>
+            What would you like to do with <b>{plan.name}</b>?
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2">
+          <Button onClick={setLiveNow} disabled={busy || isLive || !hasClass}
+            className="gap-2 justify-start h-auto py-2.5" data-testid="postsave-set-live">
+            <BadgeCheck className="h-4 w-4 shrink-0" />
+            <span className="text-left">
+              <span className="block text-sm">Set Live to Students</span>
+              <span className="block text-[11px] font-normal opacity-80">
+                {isLive ? 'Already LIVE — your changes were applied to students'
+                  : hasClass ? 'Apply this structure to all students of the class now'
+                  : 'Needs a class assigned to the plan'}
+              </span>
+            </span>
+          </Button>
+          <Button variant="outline" onClick={copyAsDraft} disabled={busy}
+            className="gap-2 justify-start h-auto py-2.5" data-testid="postsave-copy-draft">
+            <Copy className="h-4 w-4 shrink-0" />
+            <span className="text-left">
+              <span className="block text-sm">Copy as Draft</span>
+              <span className="block text-[11px] font-normal text-muted-foreground">Keep a draft copy you can edit without affecting students</span>
+            </span>
+          </Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy} data-testid="postsave-dismiss">
+            Not now
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

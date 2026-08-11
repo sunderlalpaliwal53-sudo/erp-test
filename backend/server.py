@@ -675,6 +675,26 @@ async def set_plan_live(plan_id: str, current=Depends(get_current_user)):
     return {'ok': True, 'status': 'live', 'assigned_students': assigned}
 
 
+@api.post('/fees/plans/{plan_id}/duplicate', dependencies=[Depends(require_roles('super_admin', 'school_admin'))])
+async def duplicate_fee_plan(plan_id: str, current=Depends(get_current_user)):
+    """Create a DRAFT copy of a plan. Never touches the live plan or students."""
+    plan = await fee_plans_col.find_one({'id': plan_id}, {'_id': 0})
+    if not plan:
+        raise HTTPException(404, 'Plan not found')
+    if current['role'] != 'super_admin' and plan['school_id'] != current.get('school_id'):
+        raise HTTPException(403, 'Forbidden')
+    data = {k: v for k, v in plan.items() if k not in ('id', 'created_at', 'updated_at')}
+    data['name'] = f"{plan.get('name', 'Plan')} (Copy)"
+    data['status'] = 'draft'
+    data['is_active'] = False
+    p = FeePlan(**data)
+    await fee_plans_col.insert_one(p.model_dump())
+    await log_audit(action='fee_plan.duplicate', current_user=current, school_id=plan['school_id'],
+                    entity_type='fee_plan', entity_id=p.id,
+                    details={'source': plan_id, 'name': p.name})
+    return p.model_dump()
+
+
 @api.delete('/fees/plans/{plan_id}', dependencies=[Depends(require_roles('super_admin', 'school_admin'))])
 async def delete_fee_plan(plan_id: str, current=Depends(get_current_user)):
     plan = await fee_plans_col.find_one({'id': plan_id}, {'_id': 0})

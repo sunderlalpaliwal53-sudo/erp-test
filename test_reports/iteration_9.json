@@ -1,0 +1,28 @@
+{
+  "summary": "Iter9: End-to-end verification of the one-time fee double-count fix, FLOOR RULE clamp, June/March editability, and new Post-Save dialog with Copy-as-Draft + Set-Live path. Backend: 11 new + 4 existing month-overrides + 23 stanvard_real_seed + 1 class_viii regression tests all PASS. New backend suite /app/backend/tests/test_fee_plan_duplicate_and_onetime.py covers (a) untouched April with 37000/monthly + 5000 one-time in April returns installments April=8700, others=3700 (no double-count); (b) re-typing 8700 (frontend stores override=3700 recurring-only) still yields April=8700 backend-side (regression proof — was 13700 before fix); (c) typed increase to 12000 stored as override=7000 backend returns 12000; (d) plan persists month_amounts as recurring-only; (e) POST /api/fees/plans/{id}/duplicate returns '<name> (Copy)' Draft with is_active=false, same items/month_amounts, original untouched; (f) duplicate 404 on unknown id; (g) POST /api/fees/plans/{id}/set-live on classless plan → 400 and plan status not promoted. FRONTEND (Playwright, admin@stanvard.school KNP): created plan with monthly ₹37,000 + one_time ₹5,000 in April → April input shows exactly 8700, caption 'incl. ₹5,000.00 one-time', min attr = 5000; typing 4000 CLAMPED to 5000 with warning toast 'This month includes ₹5,000.00 of one-time fees — the amount can't go below that.'; typing 12000 accepted; June & March inputs editable; Save → postsave-dialog appears; postsave-set-live BUTTON DISABLED (classless plan, correct); postsave-copy-draft creates 'TEST_Iter9_OneTimeFloor (Copy)' Draft plan while original untouched, success toast fires.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_fee_plan_duplicate_and_onetime.py",
+    "/app/backend/tests/test_fee_plan_month_overrides.py",
+    "/app/backend/tests/test_class_viii_may_june_skip_march_charge.py",
+    "/app/backend/tests/test_stanvard_real_seed.py",
+    "/app/test_reports/pytest/iter9.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "setMonthAmount (FeesStructure.jsx:450) correctly stores recurring-only override = max(typed - oneTime, 0); floor clamp with warning toast is user-friendly. min={m.oneTime||0} on the input also blocks native step-down below the floor.",
+    "_build_plan_installments (server.py:492-548) composes amt = override + one_time exactly once — no double-counting. Correct order: override_by_month.get else net_by_month.get, then + one_time_here.",
+    "PostSaveDialog correctly disables Set-Live when plan.class_id is falsy OR already live; hover copy explains the reason. onSaved is invoked with the API response so plan.id is fresh (works for both create and edit).",
+    "Duplicate endpoint (server.py:678) resets id/created_at/updated_at via FeePlan(**data) constructor, forces status='draft'/is_active=False, and never touches the source plan or student assignments. Audit log fired.",
+    "MINOR: duplicate endpoint returns 404 for unknown id but does not explicitly handle 403 cross-school in the same handler — the school_id != current check is present but only reachable for non-super_admin. Test not attempted (no second school admin in seed) — non-blocking."
+  ],
+  "updated_files": ["/app/backend/tests/test_fee_plan_duplicate_and_onetime.py"],
+  "success_rate": {"backend": "100% (39/39 tests pass across the 4 relevant suites)", "frontend": "100% (all assertions in the reproduction script passed)"},
+  "test_credentials": "admin@stanvard.school / Admin@2026",
+  "seed_data_creation": "Backend tests create TEST_* plans (all classless) and teardown deletes them. Frontend Playwright created TEST_Iter9_OneTimeFloor + (Copy) — both deleted via API afterwards. Real-seed 375 students and existing live plans untouched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The bug (one-time fee double-count when user edits a month's total) is fully fixed. Frontend stores month_amounts as RECURRING-ONLY (typed - oneTime); backend adds one_time on top exactly once. Data-testids in FeesStructure.jsx: add-fee-plan, plan-name, new-item-head, new-item-amount, new-item-freq, one-time-month-select, add-item-btn, month-amount-{1..12}, preview-month-{1..12}, save-plan, postsave-dialog, postsave-set-live, postsave-copy-draft, postsave-dismiss, edit-plan-{id}, set-live-plan-{id}. Not tested (would break real students): actual set-live click on a class-scoped plan — verified only the disabled state on classless plans and the 400 backend path.",
+  "rca of the issue": "Prior behaviour: when a month carried a one-time fee, the input showed the combined amount (e.g. 8700 = 3700 recurring + 5000 one-time). If the user simply re-typed 8700 (or any value), the frontend stored the WHOLE typed value as month_amounts override, and the backend then added the one-time (5000) on top → 8700 + 5000 = 13700 (double-count). Fix (FeesStructure.jsx setMonthAmount + month input caption + floor): override stored = typed - oneTime (recurring part only), input min = oneTime, values below oneTime are clamped with a warning toast. Backend _build_plan_installments unchanged in semantics (override + one_time) — the contract now matches the frontend's stored representation. Verified end-to-end: typing 8700 → override=3700 → installments API returns 8700; typing 12000 → override=7000 → 12000; typing 4000 → clamped to 5000 with toast."
+}

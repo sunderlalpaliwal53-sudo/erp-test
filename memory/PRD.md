@@ -34,6 +34,12 @@ Multi-school ERP (React + FastAPI + MongoDB) for the Stanvard school group: stud
 - Verified (iteration_8): user's real Class VIII '8th demo' plan (₹37,000, May/June skip, March ₹3,700) now renders identically in the student dialog (May/June No Fee, March charged, sum == Net Payable). New test: backend/tests/test_class_viii_may_june_skip_march_charge.py.
 - One-shot backfill: plan-based assignments' stored collection_months reconciled with their plan's active months.
 
+## Implemented (2026-08-11, iteration 4) — Month-amount editing bugfix + post-save popup
+- BUGFIX (double-count): months carrying one-time fee heads showed the combined amount in the input; retyping it stored the full value as the recurring override and the backend added the one-time fee AGAIN (e.g. 8700 -> 13700). Now the override stores only the recurring part (typed − one-time total); backend composes override + one-time exactly once.
+- FLOOR RULE: a month with one-time fee heads can never go below their sum — input min + clamp with warning toast; increases are unbounded. Caption "incl. ₹X one-time" shown on such cells.
+- Post-save popup (data-testid=postsave-dialog) after every plan save: "Set Live to Students" (existing set-live endpoint; disabled when classless/already live) or "Copy as Draft" (new POST /api/fees/plans/{id}/duplicate → '<name> (Copy)' draft, never touches students) or "Not now".
+- Verified (iteration_9): 39/39 backend tests across 4 suites + full Playwright assertions (clamp toast, April=8700 stays 8700 after retype, duplicate creates draft copy, set-live disabled states).
+
 ## Known Notes / Backlog
 - P1: server.py is ~4200 lines — split into routers (exams, fees, auth...) for maintainability.
 - P1: report-card.pdf served with Content-Disposition: inline; consider ?download=1 option.
