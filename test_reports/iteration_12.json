@@ -1,0 +1,39 @@
+{
+  "summary": "Iter12 — Verified 4 review items. TASK 1 (no pencil on assignment card) PASS: created LKG assignment for Gaurav (KNP-972), StudentDetail Fee Assignments card shows only delete-assignment-{id} trash button (0 .lucide-pencil icons inside card), 'New Assignment' button present and functional. TASK 3 (empty assignments) verified at start: GET /api/fees/assignments returned []; note: by end of run count grew to 23 (user is creating fresh assignments in parallel — not a regression). TASK 4 (fee-collect picker >200 + LKG visible + class filter) FULLY PASS: picker now shows 375 students (opt count 376 incl empty state), search 'LKG' matches 25 rows (class-name match works — 13 LKG students + 12 name matches), class-filter dropdown lists All + 13 classes (LKG…Class X), selecting LKG narrows picker to exactly 13 students, picking an LKG student loads their schedule (or no-schedule state when no assignment). Regression backend: 35/35 pytest PASSED (10.10s) across test_fee_plan_duplicate_and_onetime.py, test_fee_plan_month_overrides.py, test_class_viii_may_june_skip_march_charge.py, test_stanvard_real_seed.py. TASK 2 (Parent Home Upcoming Fees) HAS A REAL BUG — see frontend_issues.integration_issues[0].",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Parent Home → Upcoming Fees card",
+        "issue": "ParentHome.jsx declares `const [sched, setSched] = useState(null)` and computes `upcomingFees` from `sched?.schedule`, but NO fetch of /api/fees/student/{activeChildId}/fee-schedule ever happens. `setSched` is never called anywhere in the file. Result: after creating a live LKG assignment for Gaurav Gurjar (assignment id efbb5a8d-…, schedule endpoint confirmed to return 10 active months: April=partial, May/July=overdue, Aug/Sept=pending, monthly ₹2,115, annual ₹21,150), parent login 6376066570/066570 → /parent shows Balance Due ₹19,400.00 correctly BUT Upcoming Fees card renders 'No upcoming fees — you're all clear.' with 0 [data-testid^='parent-upcoming-month-'] rows. Same-page /parent/pay uses a different fetch and shows the schedule correctly — confirming this is a missing-fetch bug on Home only.",
+        "affected_selectors": ["[data-testid='parent-upcoming-fees-card']", "[data-testid^='parent-upcoming-month-']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_stanvard_real_seed.py",
+    "/app/backend/tests/test_fee_plan_month_overrides.py",
+    "/app/backend/tests/test_fee_plan_duplicate_and_onetime.py",
+    "/app/backend/tests/test_class_viii_may_june_skip_march_charge.py",
+    "/app/test_reports/pytest/iter12.xml"
+  ],
+  "action_items": [
+    "HIGH — Fix ParentHome.jsx to fetch the fee schedule. Add to the existing useEffect (around line 29) a 5th Promise: `api.get('/fees/student/${activeChildId}/fee-schedule').catch(() => ({ data: null }))`, then `setSched(schedResp.data)`. Without this, the Upcoming Fees card is always empty even when assignments/schedule exist — which is exactly the scenario Task 2 is meant to solve for the post-wipe re-assignment flow. The endpoint already works (verified via API + used correctly in ParentPay & StudentDetail).",
+    "OPTIONAL — the upcoming-month row testid uses `m.month` (string like 'April 2026'?) but the schedule payload also carries `m.index` (used elsewhere). Consider standardising on `m.index` for testid stability."
+  ],
+  "critical_code_review_comments": [
+    "ParentHome.jsx line 19 vs line 47 — dangling `sched` state with no fetcher. This should have been caught before shipping; recommend adding a simple lint rule / unit smoke that Upcoming Fees renders non-empty when schedule has ≥1 pending month.",
+    "FeeCollection.jsx picker cap is now .slice(0,500) which comfortably clears the 375-student KNP branch; if a school ever exceeds 500 students the same class of bug will silently return. Consider using classFilter='all' + a warning banner 'Showing first 500 of N — pick a class filter to narrow' when pickerStudents.length > 500.",
+    "StudentDetail.jsx still imports `Pencil` (used only by the Edit Details button on the header now) and keeps `editingAssignment` state + `openAssign(assignment)` signature even though the edit path is gone — harmless but dead-code."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (35/35 pytest)", "frontend": "75% — 3 of 4 tasks pass; Task 2 parent upcoming-fees fetch missing"},
+  "test_credentials": "admin@stanvard.school / Admin@2026; parent 6376066570 / 066570 (Gaurav Gurjar KNP-972 in LKG, 2 children)",
+  "seed_data_creation": "Created temp assignment efbb5a8d-1a5b-4f8c-97e3-345894aa5701 (Gaurav Gurjar × LKG live plan 4fc5e510) via API for parent verification, then DELETE /api/fees/assignments/{id} → {ok:true}. NB: assignments collection was empty at start of run and had 23 assignments by end — user/other-agent is actively creating fresh assignments; my temp one was cleaned up.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reproduce Task 2 bug: login parent 6376066570/066570 → /parent → confirm 'Upcoming Fees' card is empty even when the same child's Balance Due card shows a non-zero amount. Fix pattern: mirror the fetch already used in ParentPay.jsx / StudentDetail.jsx which calls GET /api/fees/student/{id}/fee-schedule. Parent multi-child switcher (ChildContext) also needs the sched to be re-fetched on activeChildId change. After main agent fixes, re-verify [data-testid^='parent-upcoming-month-'] rows appear (up to 4). Parent-login field is a text input matched via `input[placeholder*='stanvard']`. Login redirects to `/` not `/dashboard`.",
+  "rca of the issue": "ParentHome.jsx uses `sched` in JSX (lines 47-49) but never calls setSched anywhere; the useEffect on line 24 fetches dues/attendance/homework/circulars only. Result: upcomingFees = (null?.schedule || []).filter(...) = []; the card always shows the empty state. Mitigation: add `api.get('/fees/student/${activeChildId}/fee-schedule').catch(()=>({data:null}))` to the Promise.all and `setSched(s.data)` on resolve."
+}

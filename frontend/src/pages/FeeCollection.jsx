@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { User, Receipt, Trash2, IndianRupee, CalendarDays, CheckCircle2, AlertCircle, Clock, Plus } from 'lucide-react';
@@ -52,6 +53,8 @@ export default function FeeCollection() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [tab, setTab] = useState('monthly'); // monthly | full | custom
   const [awaitingCount, setAwaitingCount] = useState(0);
+  const [classes, setClasses] = useState([]);
+  const [classFilter, setClassFilter] = useState('all');
 
   const loadAwaitingCount = useCallback(async () => {
     try {
@@ -63,8 +66,11 @@ export default function FeeCollection() {
 
   const loadStudents = useCallback(async () => {
     if (!activeSchoolId) return;
-    const { data } = await api.get('/students', { params: { limit: 5000 } });
-    setStudents(data);
+    const [{ data }, { data: cls }] = await Promise.all([
+      api.get('/students', { params: { limit: 5000 } }),
+      api.get('/classes'),
+    ]);
+    setStudents(data); setClasses(cls);
   }, [activeSchoolId]);
   useEffect(() => { loadStudents(); }, [loadStudents]);
   useEffect(() => {
@@ -97,6 +103,14 @@ export default function FeeCollection() {
     if (!studentId) { setSelected(null); setSched(null); setSelectedMonths({}); setItems([]); return; }
     loadSchedule(studentId);
   }, [studentId, loadSchedule]);
+
+  const classMap = useMemo(() => Object.fromEntries(classes.map((c) => [c.id, c.name])), [classes]);
+  // Class-wise filter for the student picker (previously capped at first 200
+  // students, which hid LKG & other classes from search).
+  const pickerStudents = useMemo(
+    () => (classFilter === 'all' ? students : students.filter((s) => s.class_id === classFilter)),
+    [students, classFilter],
+  );
 
   // ----- Monthly tab helpers -----
   const monthlyItems = useMemo(() => {
@@ -291,7 +305,18 @@ export default function FeeCollection() {
         <div className="xl:col-span-2 space-y-4">
           {/* STUDENT PICKER */}
           <Card className="p-5 border-border">
-            <Label className="mb-2 block">Student</Label>
+            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+              <Label>Student</Label>
+              <Select value={classFilter} onValueChange={setClassFilter}>
+                <SelectTrigger className="w-44 h-9" data-testid="fee-collect-class-filter">
+                  <SelectValue placeholder="All Classes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Classes</SelectItem>
+                  {classes.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
             <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
               <PopoverTrigger asChild>
                 <button data-testid="fee-collect-student-picker" className="w-full flex items-center gap-2 h-11 px-3 rounded-md border border-border bg-card hover:bg-secondary text-sm text-left">
@@ -307,11 +332,11 @@ export default function FeeCollection() {
                   <CommandList>
                     <CommandEmpty>No students found</CommandEmpty>
                     <CommandGroup>
-                      {students.slice(0, 200).map((s) => (
-                        <CommandItem key={s.id} value={`${s.full_name} ${s.admission_number}`} onSelect={() => { setStudentId(s.id); setPickerOpen(false); }}>
+                      {pickerStudents.slice(0, 500).map((s) => (
+                        <CommandItem key={s.id} value={`${s.full_name} ${s.admission_number} ${classMap[s.class_id] || ''}`} onSelect={() => { setStudentId(s.id); setPickerOpen(false); }} data-testid={`fee-collect-student-${s.id}`}>
                           <div className="flex flex-col">
                             <span className="font-medium">{s.full_name}</span>
-                            <span className="text-xs text-muted-foreground">{s.admission_number}</span>
+                            <span className="text-xs text-muted-foreground">{s.admission_number}{classMap[s.class_id] ? ` · ${classMap[s.class_id]}` : ''}{s.section ? `-${s.section}` : ''}</span>
                           </div>
                         </CommandItem>
                       ))}

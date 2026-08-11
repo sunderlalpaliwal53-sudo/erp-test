@@ -206,8 +206,7 @@ export default function StudentDetail() {
                         <div className="tabular-nums font-semibold text-base" data-testid={`fee-assignment-net-${a.id}`}>{money(net)}</div>
                         {canEdit && (
                           <div className="flex gap-1 mt-2 justify-end">
-                            <Button size="sm" variant="ghost" onClick={() => openAssign(a)}><Pencil className="h-3 w-3" /></Button>
-                            <Button size="sm" variant="ghost" onClick={() => deleteAssignment(a.id)}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+                            <Button size="sm" variant="ghost" onClick={() => deleteAssignment(a.id)} data-testid={`delete-assignment-${a.id}`}><Trash2 className="h-3 w-3 text-destructive" /></Button>
                           </div>
                         )}
                       </div>

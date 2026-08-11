@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ChildSwitcher } from '@/components/ChildSwitcher';
-import { Wallet, CalendarCheck, BookOpen, Megaphone } from 'lucide-react';
+import { Wallet, CalendarCheck, BookOpen, Megaphone, Clock } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useChild } from '@/contexts/ChildContext';
 import { useNavigate } from 'react-router-dom';
@@ -16,23 +16,25 @@ export default function ParentHome() {
   const { activeChild, activeChildId, children, hasMultiple, loading: childLoading } = useChild();
   const nav = useNavigate();
   const [dues, setDues] = useState(null);
+  const [sched, setSched] = useState(null);
   const [attendance, setAttendance] = useState([]);
   const [homework, setHomework] = useState([]);
   const [circulars, setCirculars] = useState([]);
 
   useEffect(() => {
     if (!activeChildId) {
-      setDues(null); setAttendance([]); setHomework([]); setCirculars([]);
+      setDues(null); setSched(null); setAttendance([]); setHomework([]); setCirculars([]);
       return;
     }
     (async () => {
-      const [{ data: d }, { data: a }, { data: hw }, { data: c }] = await Promise.all([
+      const [{ data: d }, { data: a }, { data: hw }, { data: c }, { data: fs }] = await Promise.all([
         api.get(`/fees/student/${activeChildId}/dues`),
         api.get('/attendance', { params: { student_id: activeChildId } }),
         api.get('/homework'),
         api.get('/circulars'),
+        api.get(`/fees/student/${activeChildId}/fee-schedule`).catch(() => ({ data: null })),
       ]);
-      setDues(d); setAttendance(a); setHomework(hw.slice(0, 3)); setCirculars(c.slice(0, 3));
+      setDues(d); setSched(fs); setAttendance(a); setHomework(hw.slice(0, 3)); setCirculars(c.slice(0, 3));
     })();
   }, [activeChildId]);
 
@@ -41,6 +43,11 @@ export default function ParentHome() {
   const paidTotal = dues?.total_paid || 0;
   const balance = dues?.balance || 0;
   const nextDueDate = (dues?.dues || []).map((d) => d.due_date).filter(Boolean).sort()[0];
+  // Upcoming fees straight from the monthly fee schedule (same source as the
+  // student section's Monthly Fees tab) — next unpaid/partial months.
+  const upcomingFees = (sched?.schedule || [])
+    .filter((m) => ['pending', 'overdue', 'partial'].includes(m.status))
+    .slice(0, 4);
   const presentPct = attendance.length ? Math.round((attendance.filter((a) => a.status === 'present').length / attendance.length) * 100) : 0;
 
   return (
@@ -129,7 +136,23 @@ export default function ParentHome() {
             </Card>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            <Card className="p-5 border-border" data-testid="parent-upcoming-fees-card">
+              <div className="flex items-center justify-between mb-3">
+                <div className="font-semibold flex items-center gap-2"><Clock className="h-4 w-4 text-[#B45309]" /> Upcoming Fees</div>
+                <Button size="sm" variant="ghost" onClick={() => nav('/parent/pay')} data-testid="parent-upcoming-pay-link">Pay</Button>
+              </div>
+              {upcomingFees.length === 0 && <div className="text-sm text-muted-foreground py-4">No upcoming fees — you're all clear.</div>}
+              {upcomingFees.map((m) => (
+                <div key={m.index} className="py-3 border-t border-border first:border-t-0 flex items-center justify-between gap-2" data-testid={`parent-upcoming-month-${m.month}`}>
+                  <div className="flex items-center gap-2">
+                    <div className="font-medium text-sm">{m.label}</div>
+                    <Badge variant="secondary" className={m.status === 'overdue' ? 'bg-[#FEE4E2] text-[#B42318] border border-[#FECACA]' : ''}>{m.status}</Badge>
+                  </div>
+                  <div className="text-sm font-semibold tabular-nums">{money(Math.max((m.amount || 0) - (m.paid_amount || 0), 0))}</div>
+                </div>
+              ))}
+            </Card>
             <Card className="p-5 border-border" data-testid="parent-homework-card">
               <div className="flex items-center justify-between mb-3"><div className="font-semibold">Recent Homework</div><Button size="sm" variant="ghost" onClick={() => nav('/parent/homework')}>See all</Button></div>
               {homework.length === 0 && <div className="text-sm text-muted-foreground py-4">No homework yet.</div>}

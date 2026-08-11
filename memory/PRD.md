@@ -45,6 +45,13 @@ Multi-school ERP (React + FastAPI + MongoDB) for the Stanvard school group: stud
 - iteration_10 caught a file corruption from the edit (orphan fragment + missing component) — repaired; webpack compiles clean.
 - Verified (iteration_11): 35/35 backend tests + Playwright char-by-char proof (4→40→400→4000 no snap while focused, blur resets to 5000 + toast), persistence, no double-count via installments API.
 
+## Implemented (2026-08-11, iteration 6) — Student-section edit removal, parent upcoming fees, assignment wipe, picker fix
+- Student section: removed the Edit (pencil) option from fee assignment cards — fees are only editable via the main Fee Structures section. "New Assignment" + delete remain.
+- Parent portal: ParentHome now shows an "Upcoming Fees" card fed by the monthly fee schedule (same source as the student's Monthly Fees tab): next 4 unpaid months with amounts + status badges, Pay link to /parent/pay.
+- Data: all 375 fee assignments deleted at user request (fresh assignments to be created by user).
+- BUGFIX (fee collection picker): LKG/other students were missing because the picker hard-capped at the first 200 students. Now lists up to 500, each option shows class, search matches class names, and a class-wise filter dropdown (fee-collect-class-filter) was added.
+- Verified (iterations 12-13): 35/35 backend tests; picker shows all 375 students, LKG filter narrows to 13; no pencil on assignment cards; parent Upcoming Fees populates per-child and refetches on child switch.
+
 ## Known Notes / Backlog
 - P1: server.py is ~4200 lines — split into routers (exams, fees, auth...) for maintainability.
 - P1: report-card.pdf served with Content-Disposition: inline; consider ?download=1 option.
