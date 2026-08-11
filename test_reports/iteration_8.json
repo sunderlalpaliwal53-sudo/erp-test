@@ -1,0 +1,30 @@
+{
+  "summary": "Iteration 8 verified the AssignFeeDialog stale-collection-months bug fix (removal of monthsHydratedRef). Backend: NEW pytest test_class_viii_may_june_skip_march_charge.py PASSED — POST /api/fees/plans with 37000/monthly + month_amounts [May=0, June=0, March=3700] returns installments endpoint result: May skip/0, June skip/0, March active/3700, other 9 months active/3700, total ₹37,000. Existing test_fee_plan_month_overrides.py 4/4 PASS. FRONTEND (primary bug reproduction): Opened existing plan-based fee assignment for real-seed Class VIII student Aarav Jangid (KNP-937, id 5df9ed17) whose saved assignment carries the STALE default collection_months [4,5,7,8,9,10,11,12,1,2] (May charged, June skipped, March missing) — the exact bug trigger. The plan '8th demo' (live, class VIII, ₹37,000, month_amounts May=0/June=0/March=3700/July=3700) is active. Dialog now correctly renders: April ₹2850 active, MAY = No Fee ✅ (previously incorrectly charged), JUNE = No Fee (Summer Vacation) ✅, July–Feb ₹2850 active, MARCH ₹2850 active ✅ (previously missing). Fee Summary shows Collection Months: April – March (No Fee in May & June) — synced with the plan (NOT the stale 'April – February / No Fee in June & March'). Sum of 10 active installments = ₹28,500 = Net Payable exactly (Gross ₹37,000 − Concession ₹8,500). Concession scaling factor 28500/37000 applied uniformly. No console errors referring to monthsHydratedRef; symbol fully removed from AssignFeeDialog.jsx. Backend confirms _sync_plan_assignments propagates plan edits (assignment still had stale collection_months on GET /api/fees/assignments, but frontend now overrides at display time from GET /api/fees/plans/{id}/installments — this is the fix).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_class_viii_may_june_skip_march_charge.py",
+    "/app/backend/tests/test_fee_plan_month_overrides.py"
+  ],
+  "action_items": [
+    "Optional server-side: run _sync_plan_assignments to reconcile the stale saved collection_months on real-seed Class VIII assignments (they still contain [4,5,7,8,9,10,11,12,1,2] server-side). Frontend now overrides on display, but persisting the correct months would keep API responses coherent with the plan. Non-blocking — bug is resolved from the user's perspective."
+  ],
+  "critical_code_review_comments": [
+    "AssignFeeDialog fix is correct and minimal: line 222–241 useEffect ALWAYS setCollectionMonths from /installments when in plan mode, replacing the stale saved list. monthsHydratedRef is fully removed. skipRebuildRef is retained for custom mode only.",
+    "planTimeline rebuild (line 244+) correctly scales per-month plan amounts by netPayable/rawTotal so student concessions still net to Net Payable exactly (verified: 10 × ₹2,850 = ₹28,500).",
+    "server.py _build_plan_installments continues to honor month_amounts overrides for June/March and zero-overrides as skips. Endpoint GET /api/fees/plans/{id}/installments returns 12 rows with correct status/amount.",
+    "MINOR: Real-seed Class VIII assignments retain a stale collection_months array on the assignment document itself; frontend masks this by re-syncing from the plan. Consider a one-shot server backfill so /api/fees/assignments matches plan reality."
+  ],
+  "updated_files": ["/app/backend/tests/test_class_viii_may_june_skip_march_charge.py"],
+  "success_rate": {"backend": "100% (1 new + 4 existing overrides tests pass)", "frontend": "100% for tested flow (primary bug verified fixed)"},
+  "test_credentials": "admin@stanvard.school / Admin@2026 (KNP school_admin)",
+  "seed_data_creation": "Backend test creates TEST_Iter8_ClassVIII_37000 plan and deletes it in teardown. Real-seed data untouched. Existing live '8th demo' plan (already created by user) was NOT modified.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Bug 'AssignFeeDialog ignores plan month_amounts overrides for existing assignments' is fixed. Frontend testids on the assignment dialog: installment-amount-{month} (present only for active months; ABSENT for skip/No-Fee months), installment-toggle-{month}, assign-summary-gross/discount/net/monthly, assign-fee-plan-select. To reproduce/verify: login as admin, open /students/5df9ed17-158f-4437-9779-b381a822ecb5 (Aarav Jangid, Class VIII), Fee Assignments tab, click pencil on the '8th demo' assignment — timeline MUST show May/June as No Fee and March active. Plan '8th demo' (id 3122a45b-…) is the user's real plan; do not delete it. Real-seed Class VIII students still carry stale collection_months on the assignment document — the frontend fix masks this via display-time re-sync from GET /api/fees/plans/{id}/installments.",
+  "rca of the issue": "Iteration 7 first sync fix added a monthsHydratedRef guard that ran ONCE on dialog open and hydrated collectionMonths from the assignment's saved collection_months. Real-seed assignments carry the pre-override default [4,5,7,8,9,10,11,12,1,2] (May charged, June skipped, March missing). Because the guard blocked subsequent syncs, the dialog kept that stale list even after switching to plan mode; the plan-mode rebuild then computed a 'typical' monthly amount and charged May while dropping March. Fix (verified): remove monthsHydratedRef entirely — the plan-timeline fetch effect now ALWAYS setCollectionMonths from the plan's /installments rows in plan mode. Verified end-to-end: dialog shows May/June No Fee and March charged with sum = Net Payable."
+}

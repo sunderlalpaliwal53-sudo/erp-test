@@ -128,7 +128,6 @@ export function AssignFeeDialog({
       // Plan-mode assignments must SYNC with the main fee structure, so only
       // skip the auto-rebuild for CUSTOM assignments (no plan to sync from).
       skipRebuildRef.current = (existingAssignment.custom_items?.length && (existingAssignment.installments || []).length) ? 1 : 0;
-      monthsHydratedRef.current = !!(existingAssignment.collection_months && existingAssignment.collection_months.length);
     } else {
       setMode('plan'); setPlanId(''); setItems([]); setSession('2026-27');
       setDiscountKind('none'); setDiscountPercent(0); setDiscountAmountInput(0);
@@ -137,7 +136,6 @@ export function AssignFeeDialog({
       setCollectionMonths(DEFAULT_COLLECTION_MONTHS);
       setInstallments([]);
       skipRebuildRef.current = 0;
-      monthsHydratedRef.current = false;
     }
     setPlanSearch(''); setErrors({}); setPreviewOpen(false); setPrevAssignment(null);
   }, [existingAssignment, open]);
@@ -219,9 +217,6 @@ export function AssignFeeDialog({
   // Skip ONE automatic rebuild right after hydrating an existing assignment so
   // its saved installment amounts are preserved.
   const skipRebuildRef = React.useRef(0);
-  // True when the collection-month selection came from a saved assignment —
-  // then we don't overwrite it with the plan's default months.
-  const monthsHydratedRef = React.useRef(false);
 
   // ------ fetch the MAIN structure's monthly timeline for the selected plan ------
   useEffect(() => {
@@ -232,12 +227,13 @@ export function AssignFeeDialog({
         if (cancelled) return;
         const rows = data.installments || [];
         setPlanTimeline(rows);
-        if (!monthsHydratedRef.current) {
-          setCollectionMonths(
-            rows.filter((r) => (r.status || 'active') !== 'skip' && Number(r.amount || 0) > 0)
-              .map((r) => Number(r.month)),
-          );
-        }
+        // Plan mode ALWAYS syncs the collection months from the main fee
+        // structure — a saved assignment's month list may be a stale default
+        // (e.g. April–February) that no longer matches the plan.
+        setCollectionMonths(
+          rows.filter((r) => (r.status || 'active') !== 'skip' && Number(r.amount || 0) > 0)
+            .map((r) => Number(r.month)),
+        );
       })
       .catch(() => { if (!cancelled) setPlanTimeline(null); });
     return () => { cancelled = true; };
@@ -569,7 +565,7 @@ export function AssignFeeDialog({
                             <button
                               key={p.id}
                               type="button"
-                              onClick={() => { setPlanId(p.id); setPlanPickerOpen(false); monthsHydratedRef.current = false; }}
+                              onClick={() => { setPlanId(p.id); setPlanPickerOpen(false); }}
                               className={`w-full text-left px-3 py-2.5 hover:bg-secondary transition-colors border-b border-border/50 last:border-0 ${p.id === planId ? 'bg-secondary' : ''}`}
                               data-testid={`plan-option-${p.id}`}
                             >

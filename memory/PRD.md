@@ -29,6 +29,11 @@ Multi-school ERP (React + FastAPI + MongoDB) for the Stanvard school group: stud
 - BUGFIX (plan vs student assignment clash): AssignFeeDialog now builds the student's timeline FROM the plan's timeline (scaled by the student's personal concession so the total == Net Payable), edit mode no longer shows stale saved installments for plan-based assignments, and collection months auto-sync from the plan.
 - Verified: student timeline sum == Net Payable (₹24,500 = 10 × ₹2,450), June/March No Fee in plan editor, student dialog and parent portal.
 
+## Implemented (2026-08-11, iteration 3) — Sync bugfix (user-reported)
+- BUG: editing a student's plan-based assignment showed the stale default month list (May charged, March missing) instead of the plan's months (May/June skipped, March charged). Cause: `monthsHydratedRef` guard trusted the assignment's saved default `collection_months`. Fix: plan mode ALWAYS syncs collection months from the plan timeline; ref removed.
+- Verified (iteration_8): user's real Class VIII '8th demo' plan (₹37,000, May/June skip, March ₹3,700) now renders identically in the student dialog (May/June No Fee, March charged, sum == Net Payable). New test: backend/tests/test_class_viii_may_june_skip_march_charge.py.
+- One-shot backfill: plan-based assignments' stored collection_months reconciled with their plan's active months.
+
 ## Known Notes / Backlog
 - P1: server.py is ~4200 lines — split into routers (exams, fees, auth...) for maintainability.
 - P1: report-card.pdf served with Content-Disposition: inline; consider ?download=1 option.
