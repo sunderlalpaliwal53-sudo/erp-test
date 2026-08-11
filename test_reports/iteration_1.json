@@ -1,0 +1,25 @@
+{
+  "summary": "Regression check after two safe changes (backend: MOCK_KEY_ID/SECRET via os.environ; frontend: ApprovalReviewDialog Fee Items stable list key). All 6 backend regression tests pass (super admin/accountant/parent login, students list=375, dues+schedule endpoints, Razorpay LIVE order creation returning a real order_XXX id with mock=false). Frontend regression: super admin logs in and reaches dashboard (Total Students=375), Approvals page loads without JS errors (no pending approvals to open the review dialog visually, but page compiles and renders — the stable-key change is a low-risk cosmetic React key improvement), Parent 9079111899/111899 logs in and lands on /parent showing child Disha Gadri and ₹14,580 balance due. No console/page errors triggered by either changed area.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_regression_iter1.py",
+    "/app/test_reports/pytest/iter1.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 3798 lines — well beyond the 700-line guideline; should be split into routers (auth, students, fees, payments, approvals) in a future refactor (main agent already declined the risky refactor for this iteration).",
+    "MOCK_KEY_ID/SECRET default values remain in code as os.environ.get defaults; if that is intentional for dev parity keep, but consider forcing explicit env in production.",
+    "ApprovalReviewDialog stable key uses `${fee_head_id}-${period || idx}` — falls back to idx when fee_head_id missing; acceptable and matches the requested change."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_regression_iter1.py (new regression test file)"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (login+approvals+parent flows verified, no console errors)"},
+  "test_credentials": "Super Admin: superadmin@stanvard.school / Stanvard@2026; Accountant: accountant@stanvard.school / Accountant@2026; Parent: 9079111899 / 111899 (login accepts either email or mobile via 'email' field)",
+  "seed_data_creation": "None. Existing seed with 375 students / 1 school (KNP) used.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend login endpoint /api/auth/login expects 'email' field for both email and mobile-number logins (parent mobile 9079111899 is passed as email). /api/students returns [] for super_admin unless school_id query param (or X-School-Id header) is provided — get school_id from /api/schools first. Razorpay is in LIVE mode (mock=false), real order ids returned; do NOT capture payments. Approvals list was empty in this run so ApprovalReviewDialog could not be opened with data — if next iteration seeds a pending discount approval, visually verify Fee Items list rows render with correct amounts and no React key-warning in console.",
+  "rca of the issue": "N/A — no bugs found."
+}

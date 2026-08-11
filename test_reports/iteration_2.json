@@ -1,0 +1,24 @@
+{
+  "summary": "Verified the discount-approval bug fix end-to-end via API. Full flow: super_admin raised a discounted payment (items 2000, discount 500) -> owner spmundra approved 500 -> super_admin called /discount-approvals/{id}/collect (cash) -> receipt KNP-2026-000004 created. Student 'Divyansh Dangi' (Class II-A, KNP): balance 21110 -> 19110 (delta = 2000 = 500 discount + 1500 paid). All three endpoints agree: /api/fees/student/{id}/dues, /api/reports/fee-status, /api/fees/student/{id}/fee-schedule. New fields total_payment_discount, total_plan_discount, payment_discount_total are present and correctly incremented (+500). Bug is FIXED.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_discount_approval_bug.py",
+    "/app/test_reports/pytest/iter2.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py still ~3800 lines — split into routers recommended (already flagged in iteration_1).",
+    "collect_payment / collect_discount_approval / student_dues / student_fee_schedule now consistently use total_payment_discount; consider adding a unit-level regression to guard against future drift between the three read endpoints."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_discount_approval_bug.py (new)"
+  ],
+  "success_rate": {"backend": "100% (1/1 targeted flow; deltas: balance -2000, report due -2000, schedule remaining -2000, payment_discount_total +500)", "frontend": "not tested (backend-only per request)"},
+  "test_credentials": "Super Admin: superadmin@stanvard.school / Stanvard@2026; Owner (KNP): spmundra@stanvard.school / mundra@sp2026; Accountant: accountant@stanvard.school / Accountant@2026",
+  "seed_data_creation": "Created 1 real Payment (receipt KNP-2026-000004, 1500 paid, 500 approved discount) on student Divyansh Dangi (id 305a2436-47ef-422f-8391-e16834bf3753). Not cleaned up — real receipts should not be deleted. Next iteration should pick a different student or account for this new receipt in totals.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Discount-approval collect endpoint is POST /api/discount-approvals/{approval_id}/collect with body {payment_mode:'cash'}. Approve is POST /api/discount-approvals/{approval_id}/approve with body {approved_discount, remark}. /api/reports/fee-status returns a list directly. Student picked from that list must have expected>2500 & due>2500 to avoid max(0,...) clamping. A new receipt (KNP-2026-000004) has already been generated on Divyansh Dangi in this run; use a different student if re-running.",
+  "rca of the issue": "Original bug: due only decreased by amount_paid, ignoring approved_discount. Root cause was that balance/remaining computations aggregated Payment.discount into total_paid path only via subtotal but the balance formula subtracted total_paid (= subtotal - discount) and did not separately subtract the payment-level discount. Fix (already in code): student_dues now computes total_payment_discount = sum(payment.discount) and balance = total_expected - total_discount - total_payment_discount - total_paid. student_fee_schedule mirrors this via remaining_balance = net_annual - total_paid - total_payment_discount and _build_month_schedule accepts extra_paid_credit. report_fee_status aggregates pay_disc_by_stu and computes expected_after_disc = expected - disc - pay_disc; row discount now includes pay_disc. Verified: delta_balance == approved_discount + total_paid across all three endpoints."
+}

@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="0.827" timestamp="2026-08-07T09:40:37.332885+00:00" hostname="agent-env-9b050ea7-c454-452c-9a30-ca49123574ac"><testcase classname="tests.test_onetime_fee" name="test_one_time_fee_flow" time="0.763" /></testsuite></testsuites>

@@ -1,0 +1,22 @@
+{
+  "summary": "Verified one-time fee bug fix on backend. Created deterministic setup (fresh class ONETIME-TEST + student + Tuition OT 10000 monthly + Admission OT 2000 one_time_month=9) via super_admin, POSTed the plan (assigned_students=1), and validated /api/fees/student/{id}/fee-schedule + /api/fees/student/{id}/dues. Result matches spec: Sept (9) amount=3000, normal collection months=1000 each, June (6) & March (3)=0 with status='no_fee', sum of active months=12000, dues total_expected=12000, and one-time 2000 appears only in September (no other month inflated). Auto-assignment via _sync_plan_assignments propagated the plan installments to the student's FeeAssignment correctly.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
+  "test_report_links": [
+    "/app/backend/tests/test_onetime_fee.py",
+    "/app/test_reports/pytest/onetime_fee.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "_build_plan_installments correctly separates one_time from recurring items and adds one-time in full to its target month with fallback to first collection month if invalid/missing.",
+    "_sync_plan_assignments repoints existing student assignments to the plan and replaces installments so schedule/dues stay in sync with plan edits."
+  ],
+  "updated_files": ["/app/backend/tests/test_onetime_fee.py"],
+  "success_rate": { "backend": "100%", "frontend": "N/A (skipped per request)" },
+  "test_credentials": "superadmin@stanvard.school / Stanvard@2026",
+  "seed_data_creation": "Created fresh class 'ONETIME-TEST' section A, one student 'One Time Test', two fee heads 'Tuition OT' & 'Admission OT', and plan 'OneTime Test Plan' under the first (Stanvard) school. Non-destructive to existing seed data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Regression test at /app/backend/tests/test_onetime_fee.py covers the one-time fee flow end-to-end (plan create -> auto-assign -> student schedule -> dues). Schedule rows use status values 'overdue'/'pending'/'no_fee' (not 'active'); sum of amount>0 rows is the reliable annual total. Fee schedule endpoint returns {'schedule': [...]} with month/year/amount/status/label.",
+  "rca of the issue": "N/A - fix verified. Root cause (pre-fix) was that one-time items were flowing through the equal-split path; the fix separates one_time items and adds their full amount to plan.item.one_time_month (fallback: first collection month), then sums with recurring net for that month."
+}

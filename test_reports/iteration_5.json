@@ -1,0 +1,24 @@
+{
+  "summary": "End-to-end testing of new Exams/Report Cards/CSV Import modules. 17/17 backend pytest tests pass covering exam CRUD, validation (no-subjects 400, duplicate subject names 400, marks>max 400), teacher role can save marks, results ranks/totals/grades, report card JSON+PDF, parent 403 for unlinked child + 200 for own child, publish/unpublish toggle, CSV import (2 created + 2 skipped with error messages, missing full_name column 400), regression smoke. Frontend Playwright pass covering admin login -> Exams page (seeded Half-Yearly with 5 subjects, published) -> Marks dialog (grid rendered, 45 inputs for 8 students x 5 subjects + header cells) -> Results dialog (8 students with ranks #1-#8, totals x/500, %, grades, PDF buttons per row, 'AB' shown for absent Science) -> Students Import CSV dialog (all 4 data-testids visible) -> regression (Dashboard, Receipts, Attendance load) -> Parent portal (nav-results visible, /parent/results shows Half-Yearly report card for Pari Sharma with 68% grade B, PDF download button present). Grade scale verified: 68% -> B; individual 95/100 -> A+; 76/100 -> A.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_exams_and_import.py",
+    "/app/test_reports/pytest/exams_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now ~4245 lines - strongly recommend splitting into routers (exams, students_import, fees, auth) for maintainability. Was already flagged in iter 4.",
+    "report-card.pdf uses Content-Disposition: inline (not attachment) - browser will open PDF inline. Per agent-to-agent note this is a known behavior; consider making it configurable via ?download=1.",
+    "CSV import auto-generates admission numbers using year-hardcoded prefix '{code}-2025-XXXX' (see server.py:4134). Will become stale in academic session 2026-27+; use school's current session year instead.",
+    "Exam _grade_for boundary check: 95/100 => 'A+' but 90/100 also 'A+', 89.99/100 => 'A'; grade thresholds match spec (A+>=90, A>=75, B>=60, C>=45, D>=33). One minor point: with mixed max_marks (e.g. 50), grade of a single subject with 45/50=90% shows A+ but might mismatch parents' school-scale expectations - documentation/UX only.",
+    "POST /api/students/import returns 200 even when 0 students created and all rows are errors - consider 207/400 when created==0."
+  ],
+  "updated_files": ["/app/backend/tests/test_exams_and_import.py"],
+  "success_rate": {"backend": "100% (17/17)", "frontend": "100% for tested flows"},
+  "test_credentials": "admin.gn@stanvard.school/admin123, teacher.gn@stanvard.school/teacher123, parent.gn20250001@stanvard.school/parent123",
+  "seed_data_creation": "CSV import test created 2 students in GN school (TEST_Import_A_* and TEST_Import_C_*) with auto-generated admission numbers. Visible in Results dialog as an extra unranked row.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run backend tests: REACT_APP_BACKEND_URL=<url> pytest -o addopts='' backend/tests/test_exams_and_import.py. Uses GN school admin/teacher/parent credentials. Login page fields don't have type=email; use data-testid selectors login-email-input / login-password-input / login-submit-button. Nav testids: nav-exams, nav-students, nav-results (parent). Exam action testids follow pattern exam-{action}-{examId}. Marks-input testids pattern marks-input-{studentId}-{subjectName}. Parent report card PDF testid: parent-report-pdf-{examId}."
+}
