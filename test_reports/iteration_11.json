@@ -1,0 +1,29 @@
+{
+  "summary": "Iter11 — Full re-verification of the free-typing + blur-reset Fee Plan monthly grid fix passed end-to-end. Backend regression (4 target suites, 35 tests) all green after passing REACT_APP_BACKEND_URL env. Frontend Playwright drove the exact reproduction: admin login → Fee Structures → Add Plan → Tuition 37000 monthly + Admission 5000 one-time April → April shows 8700 with caption 'incl. ₹5,000.00 one-time'. Typing 4→40→400→4000 in April rendered EACH intermediate value in the input WITHOUT clamping while focused; Tab blur then reset April to 5000 AND fired a sonner toast: 'This month includes ₹5,000.00 of one-time fees — the amount can't go below that. Reset to minimum.'. Live-preview update (May=4200 while focused: Net moved ₹38,300→₹38,800) confirmed. Skip-via-0 May shows 'Skipped'. June/March inputs editable. Save triggered postsave-dialog: set-live disabled (classless), copy-draft visible, dismiss closes cleanly. Reopened plan for edit: April=5000, May=0, June=empty (auto) — persisted. Installments API: April=5000 (no double count of one-time). No console errors. TEST plan deleted via API — no live pollution.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_fee_plan_duplicate_and_onetime.py",
+    "/app/backend/tests/test_fee_plan_month_overrides.py",
+    "/app/backend/tests/test_class_viii_may_june_skip_march_charge.py",
+    "/app/backend/tests/test_stanvard_real_seed.py",
+    "/app/test_reports/pytest/iter11.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: The four backend test files hardcode a stale default BASE_URL ('https://erp-functional-qa-1.preview.emergentagent.com') in `os.environ.get('REACT_APP_BACKEND_URL', <default>)`. Per system guidelines .env defaults should not fall back to stale URLs. Recommend removing the default so tests fail fast if env is unset — right now they silently 404 against a dead host when env isn't exported to the shell. Not blocking; workaround is to run pytest with `REACT_APP_BACKEND_URL=... pytest ...`.",
+    "OPTIONAL: FeesStructure.jsx is 812 lines with three dialogs + helpers. Consider splitting FeePlanDialog / PostSaveDialog / MonthAmountInput into /app/frontend/src/components/fees/*.jsx to satisfy the 700-line guideline and prevent the class of orphan-fragment corruption that blocked iter10."
+  ],
+  "critical_code_review_comments": [
+    "MonthAmountInput implementation is correct and self-contained: local `text` state + `focused` flag; useEffect re-syncs from prop ONLY when not focused (so external re-compute after item edits still lands correctly); onChange live-commits when value is a valid number >= floor (drives the preview); onBlur runs the commit() gate that handles empty→reset, NaN→revert, <floor→toast+snap-to-floor, else→commit. Semantically matches the spec.",
+    "setMonthAmount contract (recurring = typed − oneTime, clamped ≥ 0) prevents double-counting; verified end-to-end via /api/fees/plans/{id}/installments (April total = 5000 after blur-reset with only 5000 one-time and no recurring override remaining).",
+    "Backend test suites don't cover the free-typing UX (that's inherently a UI concern), but the persistence path is well covered by test_fee_plan_month_overrides.py and test_fee_plan_duplicate_and_onetime.py which both stayed green."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (35/35)", "frontend": "100% (all core + auxiliary flows)"},
+  "test_credentials": "admin@stanvard.school / Admin@2026 (used); superadmin@stanvard.school / Stanvard@2026 (not used this run)",
+  "seed_data_creation": "Created classless draft plan 'TEST_FreeTyping_Iter11' (id 081664c1-3cae-4bbd-a1b7-48b5e2390cc1) during testing; deleted via DELETE /api/fees/plans/{id} at end (HTTP 200 {\"ok\":true}). No live plans touched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Everything in the review request is verified green. If retesting, remember to export REACT_APP_BACKEND_URL before invoking pytest — the tests have a stale hardcoded default. Playwright login field is a text input matched via `input[placeholder*='stanvard']`, not type=email. Fee Structures route is `/fees` (not `/fees/structures`); use the sidebar link or direct URL /fees. All month-amount-{n} testids work; the toast selector `[data-sonner-toast]` picks up the sonner warning content directly.",
+  "rca of the issue": "N/A — iter10 corruption is fixed. RCA of the fix that shipped: MonthAmountInput uses an internal `text` state that mirrors the prop only while unfocused (via useEffect gated on !focused), so keystrokes never round-trip through the reducer's floor logic. Blur calls commit() which is the single choke point that snaps below-floor values up to floor and toasts. onChange live-commits when value ≥ floor to keep the Net preview responsive. This satisfies the user's exact request: 'we can type any number in the box, but if it is below the other fee heads amount, it automatically resets to the minimum amount — give the option to type in any amount.'"
+}

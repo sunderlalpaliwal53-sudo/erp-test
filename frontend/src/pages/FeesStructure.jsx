@@ -443,25 +443,17 @@ function FeePlanDialog({ state, onOpenChange, heads, classes, onSaved }) {
   }));
 
   // Override a single month's payable amount (empty = revert to auto split).
-  // The typed value is the TOTAL for that month. When one-time fee heads land
-  // in the month, the month's amount can NEVER go below their sum (floor) but
-  // may increase freely; the stored override is only the recurring part
-  // (typed - oneTime), so one-time fees are never double-counted.
+  // The typed value is the TOTAL for that month; the stored override is only
+  // the recurring part (typed - oneTime) so one-time fees are never
+  // double-counted. Clamping to the one-time floor happens on blur in
+  // MonthAmountInput — typing itself is never interrupted.
   const setMonthAmount = (month, v, oneTime = 0) => {
-    const floor = Number(oneTime || 0);
-    if (v !== '' && v !== null && v !== undefined) {
-      const t = Number(v);
-      if (!Number.isNaN(t) && t < floor) {
-        toast.warning(`This month includes ${money(floor)} of one-time fees — the amount can't go below that.`);
-        v = String(floor);
-      }
-    }
     setForm((f) => {
       const others = (f.month_amounts || []).filter((o) => Number(o.month) !== Number(month));
       if (v === '' || v === null || v === undefined) return { ...f, month_amounts: others };
       const typed = Number(v);
       if (Number.isNaN(typed)) return f;
-      const recurring = Math.max(+(typed - floor).toFixed(2), 0);
+      const recurring = Math.max(+(typed - Number(oneTime || 0)).toFixed(2), 0);
       return { ...f, month_amounts: [...others, { month: Number(month), amount: recurring }] };
     });
   };
@@ -682,11 +674,9 @@ function FeePlanDialog({ state, onOpenChange, heads, classes, onSaved }) {
                   {bd.perMonth.map((m) => (
                     <div key={m.month} className={`rounded-md border p-1.5 text-center ${m.noFee && !m.override ? 'border-dashed border-border bg-muted/40' : m.override ? 'border-[#FCD34D] bg-[#FFFBEB]' : m.discount > 0 ? 'border-[#A7F3D0] bg-[#ECFDF5]' : 'border-border'}`} data-testid={`preview-month-${m.month}`}>
                       <div className="text-[10px] text-muted-foreground">{MONTH_LABEL[m.month].slice(0, 3)}</div>
-                      <Input type="number" min={m.oneTime || 0} data-testid={`month-amount-${m.month}`}
-                        className="h-7 px-1 text-xs tabular-nums text-center"
-                        placeholder="0"
-                        value={m.override ? m.net : (m.noFee ? '' : m.net)}
-                        onChange={(e) => setMonthAmount(m.month, e.target.value, m.oneTime)} />
+                      <MonthAmountInput month={m.month} floor={m.oneTime || 0}
+                        value={m.override ? m.net : (m.noFee ? null : m.net)}
+                        onCommit={(v) => setMonthAmount(m.month, v, m.oneTime)} />
                       {m.oneTime > 0 && <div className="text-[9px] text-muted-foreground">incl. {money(m.oneTime)} one-time</div>}
                       {m.noFee && !m.override && <div className="text-[9px] text-muted-foreground">No Fee</div>}
                       {m.noFee && m.override && <div className="text-[9px] text-[#B45309]">Skipped</div>}
@@ -704,6 +694,48 @@ function FeePlanDialog({ state, onOpenChange, heads, classes, onSaved }) {
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// -------------------------------------------------------------------
+// Month amount input — free typing, floor enforced on BLUR only.
+// You can type any number; when you leave the field, a value below the
+// month's one-time fee total automatically resets to that minimum.
+// -------------------------------------------------------------------
+function MonthAmountInput({ month, value, floor = 0, onCommit }) {
+  const norm = (v) => (v === null || v === undefined || v === '' ? '' : String(v));
+  const [text, setText] = useState(norm(value));
+  const [focused, setFocused] = useState(false);
+  // Follow external recomputes (item amount changes, reset-to-auto) unless typing.
+  useEffect(() => { if (!focused) setText(norm(value)); }, [value, focused]);
+
+  const commit = (raw) => {
+    if (raw === '') { onCommit(''); return; }
+    let n = Number(raw);
+    if (Number.isNaN(n)) { setText(norm(value)); return; }
+    if (n < floor) {
+      toast.warning(`This month includes ${money(floor)} of one-time fees — the amount can't go below that. Reset to minimum.`);
+      n = floor;
+    }
+    setText(String(n));
+    onCommit(String(n));
+  };
+
+  return (
+    <Input type="number" min={floor} inputMode="decimal" data-testid={`month-amount-${month}`}
+      className="h-7 px-1 text-xs tabular-nums text-center"
+      placeholder="0"
+      value={text}
+      onFocus={() => setFocused(true)}
+      onChange={(e) => {
+        setText(e.target.value);
+        // Live-commit valid values at/above the floor so the preview updates.
+        if (e.target.value !== '' && !Number.isNaN(Number(e.target.value)) && Number(e.target.value) >= floor) {
+          onCommit(e.target.value);
+        }
+      }}
+      onBlur={(e) => { setFocused(false); commit(e.target.value); }}
+    />
   );
 }
 

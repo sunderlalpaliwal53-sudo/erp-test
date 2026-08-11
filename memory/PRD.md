@@ -40,6 +40,11 @@ Multi-school ERP (React + FastAPI + MongoDB) for the Stanvard school group: stud
 - Post-save popup (data-testid=postsave-dialog) after every plan save: "Set Live to Students" (existing set-live endpoint; disabled when classless/already live) or "Copy as Draft" (new POST /api/fees/plans/{id}/duplicate → '<name> (Copy)' draft, never touches students) or "Not now".
 - Verified (iteration_9): 39/39 backend tests across 4 suites + full Playwright assertions (clamp toast, April=8700 stays 8700 after retype, duplicate creates draft copy, set-live disabled states).
 
+## Implemented (2026-08-11, iteration 5) — Free-typing month inputs (user-reported UX bug)
+- BUG: floor rule clamped on every keystroke, blocking typing (typing "4000" in a ₹5,000-floor month snapped instantly). Fix: new MonthAmountInput component — free typing while focused, live preview commit for valid ≥ floor values, floor reset + warning toast only on BLUR; empty on blur = reset to auto-split.
+- iteration_10 caught a file corruption from the edit (orphan fragment + missing component) — repaired; webpack compiles clean.
+- Verified (iteration_11): 35/35 backend tests + Playwright char-by-char proof (4→40→400→4000 no snap while focused, blur resets to 5000 + toast), persistence, no double-count via installments API.
+
 ## Known Notes / Backlog
 - P1: server.py is ~4200 lines — split into routers (exams, fees, auth...) for maintainability.
 - P1: report-card.pdf served with Content-Disposition: inline; consider ?download=1 option.
