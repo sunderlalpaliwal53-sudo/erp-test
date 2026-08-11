@@ -3884,8 +3884,9 @@ def _grade_for(pct: float) -> str:
 
 @api.get('/exams')
 async def list_exams(request: Request, current=Depends(get_current_user),
-                     class_id: Optional[str] = None):
-    sid = resolve_school_id(current, None, request.headers.get('X-School-Id'))
+                     class_id: Optional[str] = None,
+                     school_id: Optional[str] = None):
+    sid = resolve_school_id(current, school_id, request.headers.get('X-School-Id'))
     q: Dict[str, Any] = {'school_id': sid}
     if class_id:
         q['class_id'] = class_id

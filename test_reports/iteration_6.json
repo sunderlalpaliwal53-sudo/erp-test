@@ -1,0 +1,40 @@
+{
+  "summary": "Re-verification against real-seed data (375 students, KNP branch). Backend: 23/23 pytest passing in /app/backend/tests/test_stanvard_real_seed.py covering auth (email + mobile parent login), RBAC, schools list, student count/search/detail/dues, fee heads + 13 class plans, offline cash payment with KNP-YYYY-NNNNNN receipt sequence + PDF, Razorpay MOCK order + verify (good/bad signature), analytics/fees, reports fee-status pdf/xlsx/csv, collection.csv, parent multi-child + single-child dues visibility, parent RBAC on non-linked student. Direct API checks confirmed: KNP student count = exactly 375; KNP payments = 110 (matches ~107 stated); Half-Yearly Examination exists, published, 5 subjects, 33 students + 33 marks docs, results endpoint returns 33 ranked rows. Frontend Playwright: school_admin/admin@stanvard.school login OK, Students page shows real names (Gurjar) + Class I..X; Exams page shows Half-Yearly published, Results dialog renders 33 student rows with ranks/totals/percent/grades/report-card icons, Marks dialog renders 165 input cells (33 students x 5 subjects); Parent mobile login 6376066570/066570 OK, both children (Gaurav Gurjar KNP-972, Shivam Gurjar KNP-973) visible in Results screen; Accountant Receipts page lists 110 rows including KNP-2026-000001..3 (new) + KNP-REC-* imported; super_admin Reports and Analytics pages load without visible errors. 375-student bug verified fixed.",
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "GET /api/exams", "issue": "Does not accept school_id query param for super_admin; only reads X-School-Id header. Passing ?school_id=<KNP> returns 0 exams silently (falls back to default school). Frontend school switcher uses X-School-Id so UI works; but API is inconsistent with other endpoints (students, payments, fees) that DO accept school_id query."}
+  ]},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Parent /parent/results", "issue": "For multi-child parent 6376066570, both children (Gaurav KNP-972, Shivam KNP-973) show 'No results published yet' because seeded Half-Yearly is scoped to a specific class_id/section that does not include these two students. Not a bug per se, but seed_exams.py picks 'first class with students' which happens to exclude this test parent's children -- consider seeding a report card for at least one of the documented test parents so /parent/results has content to demo.", "affected_selectors": ["parent-report-pdf-*"]}
+    ],
+    "design_issues": [
+      {"screen": "Multiple pages (Dashboard/Analytics/Reports)", "issues": ["Recurring Recharts console warning: 'The width(-1) and height(-1) of chart should be greater than 0' - chart containers momentarily render with 0 dimensions. Non-blocking but noisy in logs."]},
+      {"screen": "Exam Results / Marks dialogs", "issues": ["a11y warning: 'Missing Description or aria-describedby for {DialogContent}'. Add DialogDescription for screen-reader users."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_stanvard_real_seed.py",
+    "/app/test_reports/pytest/stanvard_real_seed_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: Make GET /api/exams accept school_id query param for consistency with other list endpoints (currently header-only).",
+    "OPTIONAL: In seed_exams.py, seed a Half-Yearly for the same class as the documented test parents (6376066570 -> children KNP-972/KNP-973) so that parent portal /parent/results shows a report card out-of-the-box for QA.",
+    "MINOR: Add DialogDescription/aria-describedby to Exam Results and Marks dialogs.",
+    "MINOR: Fix Recharts container 0-width warnings by ensuring parent has min-height/min-width or waiting for layout before render."
+  ],
+  "critical_code_review_comments": [
+    "server.py still ~4246 lines; splitting into routers (exams, students_import, fees, payments) recommended (repeat of iter 4/5 feedback).",
+    "GET /api/exams uses only X-School-Id header for super_admin (via resolve_school_id) while list-students/list-payments accept school_id query param -- inconsistent API contract.",
+    "CSV import still uses year-hardcoded prefix (flagged in iter5) - unchanged.",
+    "Benign passlib bcrypt version warning still present in backend logs; not blocking."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (23/23)", "frontend": "100% for tested flows"},
+  "test_credentials": "Verified working: superadmin@stanvard.school/Stanvard@2026, admin@stanvard.school/Admin@2026, accountant@stanvard.school/Accountant@2026, teacher@stanvard.school/Teacher@2026, parent mobile 6376066570/066570 (multi-child Gaurav+Shivam Gurjar), parent 9079111899/111899 (single-child).",
+  "seed_data_creation": "Test created 2 offline receipts (KNP-2026-000002, KNP-2026-000003) and 1 Razorpay-mock verified receipt for target KNP student via /api/payments/collect (item TEST_Tuition). Also 1 additional test row from test file's collect. Safe to keep or clear.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Real-seed regression suite lives at /app/backend/tests/test_stanvard_real_seed.py (23 tests, ~6.5s). Run with: REACT_APP_BACKEND_URL=<url> pytest -o addopts='' backend/tests/test_stanvard_real_seed.py -v. KNP school_id at time of test: dfccb27d-e0c4-4674-972c-3d552e9ca80d. Seeded exam id: c098fe7e-b322-4a0d-a199-1f98679c7131 (Half-Yearly, published, 33 students). Old iter5 test_exams_and_import.py still uses removed demo creds (admin.gn@... etc) and will fail without credential updates -- do NOT run as-is against real seed. For UI, remember super_admin gets an empty default school (GN) unless you set X-School-Id header or use the header school switcher; KNP-scoped users (admin@stanvard.school) are simpler for UI testing.",
+  "rca of the issue": "Original bug 'DB should have ~375 students, not 292' - RCA: previous seed run used demo seed.py instead of real_seed.py. Main agent already re-ran real_seed.py + qa_extra_seed.py + seed_exams.py before this iteration. This iteration confirms fix: /api/students count for KNP branch = 375 (exact), real Indian names present (Gurjar family etc.), 110 imported payment receipts visible, mobile-based parent login for multi-child parent works, Half-Yearly exam with 33 students + marks + ranks/grades renders correctly. Bug closed."
+}

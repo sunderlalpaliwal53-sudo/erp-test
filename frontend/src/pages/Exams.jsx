@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Award, Trash2, PenLine, Trophy, FileDown, X, Megaphone } from 'lucide-react';
@@ -268,7 +268,7 @@ function EnterMarks({ examId, onClose }) {
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-4xl" data-testid="marks-entry-dialog">
-        <DialogHeader><DialogTitle>Enter Marks — {data?.exam?.name || 'Loading…'}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Enter Marks — {data?.exam?.name || 'Loading…'}</DialogTitle><DialogDescription className="sr-only">Marks entry grid for all students in this exam</DialogDescription></DialogHeader>
         {!data ? (
           <div className="p-6 text-sm text-muted-foreground">Loading students…</div>
         ) : (
@@ -337,7 +337,7 @@ function ExamResults({ examId, onClose }) {
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-5xl" data-testid="exam-results-dialog">
-        <DialogHeader><DialogTitle>Results — {data?.exam?.name || 'Loading…'}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Results — {data?.exam?.name || 'Loading…'}</DialogTitle><DialogDescription className="sr-only">Ranked results table with per-student report card downloads</DialogDescription></DialogHeader>
         {!data ? (
           <div className="p-6 text-sm text-muted-foreground">Loading results…</div>
         ) : (
