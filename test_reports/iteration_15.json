@@ -1,0 +1,39 @@
+{
+  "summary": "Verified Razorpay LIVE MODE integration end-to-end. Backend: /api/payments/razorpay/order now returns mock:false with rzp_live_ key_id and real order id (order_XXXX); /api/payments/razorpay/verify correctly rejects fabricated signatures with 400 (proving live secret is used). Frontend: parent login -> /parent/pay opens the real Razorpay checkout iframe (api.razorpay.com/v1/checkout/public) with the LIVE key. No real payment captured. Regression suites 34/35 pass; the only failure is the pre-flagged STALE test (test_stanvard_real_seed.py::TestRazorpayMock::test_mock_order_and_verify_flow) which asserts mock:true from when the app was in mock mode.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "test_stanvard_real_seed.py::TestRazorpayMock", "issue": "STALE test - asserts mock:true; needs updating now that live keys are configured. Not an app bug."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_razorpay_live.py",
+    "/app/test_reports/pytest/razorpay_live.xml",
+    "/app/test_reports/pytest/regression_iter15.xml"
+  ],
+  "action_items": [
+    "Update /app/backend/tests/test_stanvard_real_seed.py::TestRazorpayMock to assert mock:false and key_id.startswith('rzp_live_') (or rename the test class). This is a test-only update, not an app fix.",
+    "User warning noted: parent 6376066570's child Gaurav Gurjar currently has 0 balance (all months 'No Fee') because fee assignments were wiped and are being re-seeded. Once assignments exist, a full checkout dry-run can be re-verified with a live sandbox test amount."
+  ],
+  "critical_code_review_comments": [
+    "server.py 1926 & 1964: RAZORPAY_MOCK auto-detects presence of keys and mock flag is returned to the client - clean.",
+    "server.py 2000 webhook uses RAZORPAY_WEBHOOK_SECRET or falls back to RAZORPAY_KEY_SECRET - acceptable for preview; recommend requiring RAZORPAY_WEBHOOK_SECRET in production and rejecting webhook if absent.",
+    "ParentPay.jsx 111-140: Razorpay handler catches verify failure with a generic 'Verification failed' toast; would be better to surface backend detail so users don't retry blindly.",
+    "Live RAZORPAY_KEY_SECRET is present in backend/.env (not a bug, but ensure this file is git-ignored and never committed)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_razorpay_live.py (new)"
+  ],
+  "success_rate": {"backend": "100% (all live-mode tests + 34/34 non-stale regression)", "frontend": "100% (checkout iframe loads with live key)"},
+  "test_credentials": "Parent 6376066570 / 066570; Admin admin@stanvard.school / Admin@2026",
+  "seed_data_creation": "None. Order create endpoint called with tiny amount (Rs.100) to exercise live path; no payment captured. Razorpay side sees the live order ids created (order_TReu0gy3jvbbM6, order_TReub5afHiaxIK). These are open unpaid orders and auto-expire per Razorpay's default policy.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Live Razorpay keys are active. To exercise the full pay flow via UI, fee assignments must be seeded for the child of parent 6376066570 (currently Gaurav Gurjar shows Rs.0 remaining, all months 'No Fee'). The new test file /app/backend/tests/test_razorpay_live.py can be reused as a smoke test - it only creates orders (no capture) and validates signature rejection. Auth uses email field with the mobile as the value for parents; response contains access_token (not token).",
+  "rca_of_the_issue": "N/A - integration change succeeded. The one failing regression test is a pre-existing assertion that assumed mock mode; explicitly flagged by user."
+}

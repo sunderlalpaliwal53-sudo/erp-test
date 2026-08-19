@@ -15,8 +15,6 @@ Covers:
 - Analytics + reports (fee-status PDF/XLSX/CSV, collection CSV, analytics/fees)
 - Parent portal: multi-child + single-child dues/payments visibility
 """
-import hmac
-import hashlib
 import os
 import re
 import pytest
@@ -245,8 +243,8 @@ class TestPaymentsOffline:
 
 
 # ------------------------ Razorpay MOCK order + verify ------------------------
-class TestRazorpayMock:
-    def test_mock_order_and_verify_flow(self, acc, knp_school_id, target_student_with_assignment):
+class TestRazorpayOrderFlow:
+    def test_order_and_signature_guards(self, acc, knp_school_id, target_student_with_assignment):
         sid = target_student_with_assignment['student_id']
         r = acc.post(f"{API}/payments/razorpay/order", json={
             'student_id': sid, 'school_id': knp_school_id,
@@ -255,31 +253,18 @@ class TestRazorpayMock:
         })
         assert r.status_code == 200, f"order create failed: {r.status_code} {r.text[:300]}"
         order = r.json()
-        assert order.get('mock') is True, f"expected mock:true, got: {order}"
+        assert order.get('mock') is False, f"expected live mode (mock:false), got: {order}"
+        assert str(order.get('key_id', '')).startswith('rzp_live_'), f"expected live key id, got: {order.get('key_id')}"
         oid = order['order_id'] if 'order_id' in order else order.get('id')
-        assert oid, f"no order id in mock order response: {order}"
+        assert oid and str(oid).startswith('order_'), f"no real razorpay order id: {order}"
 
-        # bad signature
+        # fabricated signature must always be rejected (live secret in use)
         rb = acc.post(f"{API}/payments/razorpay/verify", json={
             'razorpay_order_id': oid,
             'razorpay_payment_id': 'pay_MOCK_bad',
             'razorpay_signature': 'deadbeef',
         })
         assert rb.status_code == 400
-
-        # good signature
-        pay_id = 'pay_MOCK_' + oid[-8:]
-        payload = f"{oid}|{pay_id}".encode()
-        sig = hmac.new(MOCK_SECRET.encode(), payload, hashlib.sha256).hexdigest()
-        rg = acc.post(f"{API}/payments/razorpay/verify", json={
-            'razorpay_order_id': oid,
-            'razorpay_payment_id': pay_id,
-            'razorpay_signature': sig,
-        })
-        assert rg.status_code in (200, 201), f"verify(good) failed: {rg.status_code} {rg.text[:300]}"
-        pay = rg.json()
-        assert 'receipt_number' in pay, f"payment missing receipt_number: {pay}"
-        assert pay['receipt_number'].startswith('KNP-')
 
 
 # ------------------------ Analytics + Reports ------------------------

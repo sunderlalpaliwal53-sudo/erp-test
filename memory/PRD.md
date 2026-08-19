@@ -62,6 +62,12 @@ Multi-school ERP (React + FastAPI + MongoDB) for the Stanvard school group: stud
 - Array-index React keys fixed (Exams.jsx subject rows use crypto.randomUUID uids; ImportStudentsDialog error list keyed by content).
 - Dead variables removed (ruff F841 clean, F821 already clean — 0 undefined vars; the 13 "possibly undefined" and 51 `is`-vs-`==` findings were analyzer false positives: all `is None` idioms).
 - Verified: ruff clean, 28/28 backend tests pass, frontend compiles.
+
+## Implemented (2026-08-11, iteration 9) — Razorpay LIVE mode
+- User provided live keys (uploaded CSV); added RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET to backend/.env (keys file deleted from disk). Existing code auto-switches off MOCK mode when keys are present.
+- Verified live: order creation returns real Razorpay order ids (order_TReqd...), mock:false, live key_id; checkout.js already loaded in public/index.html; verify endpoint uses the live secret.
+- PENDING (user action): set a webhook secret in Razorpay Dashboard → Settings → Webhooks for the production domain's /api/payments/razorpay/webhook and share it to add as RAZORPAY_WEBHOOK_SECRET.
+- Verified (iteration_15): live orders (order_TReu...), mock:false, fabricated signatures rejected 400, real checkout iframe opens with live key. New suite: tests/test_razorpay_live.py. Stale mock-mode test updated to assert live mode.
 - DEFERRED (needs user sign-off / separate effort): localStorage→httpOnly-cookie auth migration (architectural, touches live auth), blanket hook-dependency churn (109 mostly intentional eslint-disabled effects — blind edits risk breaking working flows), large component splits (AssignFeeDialog/Reports/Analytics/FeeCollection/backend_test/pdf_utils), nested-ternary rewrites.
 
 ## Known Notes / Backlog
