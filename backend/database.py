@@ -38,6 +38,7 @@ counters_col = db['counters']
 discount_approvals_col = db['discount_approvals']
 exams_col = db['exams']
 marks_col = db['marks']
+message_logs_col = db['message_logs']
 
 
 async def get_next_sequence(name: str) -> int:

@@ -5,6 +5,8 @@ import hmac
 import hashlib
 import io
 import csv
+import re
+import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
 from pathlib import Path
@@ -23,7 +25,7 @@ from database import (
     attendance_col, homework_col, timetable_col,
     events_col, circulars_col, gallery_col, staff_col,
     notifications_col, audit_col, settings_col,
-    discount_approvals_col, exams_col, marks_col,
+    discount_approvals_col, exams_col, marks_col, message_logs_col,
     get_next_sequence,
 )
 from models import (
@@ -45,7 +47,7 @@ from models import (
     Staff, StaffCreate,
     Notification, NotificationCreate,
     SchoolSettings,
-    Exam, ExamCreate, ExamUpdate, MarksBulkSave,
+    Exam, ExamCreate, ExamUpdate, MarksBulkSave, FeeReminderRequest,
     now_iso, new_id,
 )
 from auth import (
@@ -4205,6 +4207,193 @@ async def import_students(request: Request, file: UploadFile = File(...),
     return {'created': created, 'skipped': len(errors), 'errors': errors[:50]}
 
 
+# =====================================================
+# TWILIO MESSAGING — SMS + WhatsApp fee reminders
+# =====================================================
+TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', '')
+TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')
+TWILIO_PHONE_NUMBER = os.environ.get('TWILIO_PHONE_NUMBER', '')
+TWILIO_WHATSAPP_FROM = os.environ.get('TWILIO_WHATSAPP_FROM') or TWILIO_PHONE_NUMBER
+TWILIO_CONFIGURED = bool(TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_PHONE_NUMBER)
+
+_twilio_client = None
+
+
+def twilio_client():
+    global _twilio_client
+    if _twilio_client is None and TWILIO_CONFIGURED:
+        from twilio.rest import Client
+        _twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    return _twilio_client
+
+
+def _normalize_phone(raw: Optional[str]) -> Optional[str]:
+    """Normalize to E.164. Bare 10-digit numbers are treated as Indian (+91)."""
+    if not raw:
+        return None
+    digits = re.sub(r'\D', '', raw)
+    if digits.startswith('0') and len(digits) == 11:
+        digits = digits[1:]
+    if len(digits) == 10:
+        digits = '91' + digits
+    if not (11 <= len(digits) <= 15):
+        return None
+    return f'+{digits}'
+
+
+async def _twilio_send(to_e164: str, body: str, channel: str) -> Dict[str, Any]:
+    client = twilio_client()
+    if not client:
+        return {'ok': False, 'error': 'Twilio is not configured'}
+
+    def _do():
+        if channel == 'whatsapp':
+            return client.messages.create(from_=f'whatsapp:{TWILIO_WHATSAPP_FROM}',
+                                          to=f'whatsapp:{to_e164}', body=body)
+        return client.messages.create(from_=TWILIO_PHONE_NUMBER, to=to_e164, body=body)
+
+    try:
+        msg = await asyncio.to_thread(_do)
+        return {'ok': True, 'sid': msg.sid, 'status': msg.status}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)[:300]}
+
+
+@api.get('/messaging/status')
+async def messaging_status(current=Depends(get_current_user)):
+    return {'configured': TWILIO_CONFIGURED,
+            'channels': ['sms', 'whatsapp'] if TWILIO_CONFIGURED else [],
+            'note': ('Trial account: SMS delivers only to numbers verified in the '
+                     'Twilio console; WhatsApp requires joining the sandbox.')} if TWILIO_CONFIGURED else {
+                'configured': False, 'channels': [], 'note': 'Twilio is not configured'}
+
+
+async def _pending_for_month(sid: str, month: int, request: Request,
+                             current: Dict[str, Any],
+                             class_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Students whose fee for the given calendar month is still unpaid."""
+    q: Dict[str, Any] = {'school_id': sid, 'status': 'active'}
+    if class_id:
+        q['class_id'] = class_id
+    students = await students_col.find(q, {'_id': 0}).to_list(2000)
+    class_map = {c['id']: c.get('name', '')
+                 for c in await classes_col.find({'school_id': sid}, {'_id': 0}).to_list(500)}
+    out: List[Dict[str, Any]] = []
+    for s in students:
+        try:
+            sched = await student_fee_schedule(s['id'], request, current)
+        except Exception:
+            continue
+        for m in (sched.get('schedule') or []):
+            if int(m.get('month') or 0) != month:
+                continue
+            remaining = round(float(m.get('amount') or 0) - float(m.get('paid_amount') or 0), 2)
+            if remaining > 0 and m.get('status') not in ('no_fee', 'paid'):
+                out.append({
+                    'student_id': s['id'], 'student_name': s.get('full_name'),
+                    'admission_number': s.get('admission_number'),
+                    'class_name': class_map.get(s.get('class_id'), ''),
+                    'phone': s.get('phone') or '', 'remaining': remaining,
+                    'label': m.get('label'), 'due_date': m.get('due_date'),
+                    'status': m.get('status'),
+                })
+            break
+    return out
+
+
+@api.get('/messaging/pending')
+async def messaging_pending(request: Request, current=Depends(get_current_user),
+                            month: int = Query(..., ge=1, le=12),
+                            class_id: Optional[str] = None,
+                            school_id: Optional[str] = None):
+    sid = resolve_school_id(current, school_id, request.headers.get('X-School-Id'))
+    rows = await _pending_for_month(sid, month, request, current, class_id)
+    return {'count': len(rows),
+            'total_amount': round(sum(r['remaining'] for r in rows), 2),
+            'rows': rows[:200]}
+
+
+@api.post('/messaging/fee-reminders',
+          dependencies=[Depends(require_roles('super_admin', 'school_admin', 'accountant'))])
+async def send_fee_reminders(body: FeeReminderRequest, request: Request,
+                             current=Depends(get_current_user)):
+    if not TWILIO_CONFIGURED:
+        raise HTTPException(503, 'Twilio is not configured')
+    if not (1 <= body.month <= 12):
+        raise HTTPException(400, 'month must be 1-12')
+    if body.channel not in ('sms', 'whatsapp', 'both'):
+        raise HTTPException(400, 'channel must be sms, whatsapp or both')
+    sid = resolve_school_id(current, body.school_id, request.headers.get('X-School-Id'))
+    school = await schools_col.find_one({'id': sid}, {'_id': 0}) or {}
+    school_name = school.get('name', 'School')
+    rows = await _pending_for_month(sid, body.month, request, current, body.class_id)
+    if len(rows) > 500:
+        # Safety cap: never fan out more than 500 Twilio calls in one request.
+        rows = rows[:500]
+    channels = ['sms', 'whatsapp'] if body.channel == 'both' else [body.channel]
+    sent = failed = skipped = 0
+    results: List[Dict[str, Any]] = []
+    for r in rows:
+        to = _normalize_phone(r['phone'])
+        if not to:
+            skipped += 1
+            results.append({**r, 'sent': False, 'error': 'no valid phone number'})
+            continue
+        text = (f"Dear Parent, the school fee of Rs.{r['remaining']:,.0f} for "
+                f"{r['student_name']} ({r['class_name']}) for {r['label']} is pending.")
+        if r['due_date']:
+            text += f" Kindly pay by {r['due_date']}."
+        text += f" - {school_name}"
+        entry: Dict[str, Any] = {**r, 'to': to, 'channels': {}}
+        ok_any = False
+        for ch in channels:
+            res = await _twilio_send(to, text, ch)
+            entry['channels'][ch] = res
+            ok_any = ok_any or res['ok']
+            await message_logs_col.insert_one({
+                'id': new_id(), 'school_id': sid, 'student_id': r['student_id'],
+                'channel': ch, 'to': to, 'body': text, 'ok': res['ok'],
+                'sid': res.get('sid'), 'status': res.get('status'),
+                'error': res.get('error'), 'kind': 'fee_reminder',
+                'sent_by': current.get('id'), 'created_at': now_iso(),
+            })
+        entry['sent'] = ok_any
+        if ok_any:
+            sent += 1
+        else:
+            failed += 1
+        results.append(entry)
+    await log_audit(action='messaging.fee_reminders', current_user=current, school_id=sid,
+                    details={'month': body.month, 'channel': body.channel,
+                             'pending': len(rows), 'sent': sent,
+                             'failed': failed, 'skipped': skipped})
+    return {'month': body.month, 'channel': body.channel, 'pending_count': len(rows),
+            'sent': sent, 'failed': failed, 'skipped': skipped, 'results': results[:100]}
+
+
+@api.post('/messaging/test', dependencies=[Depends(require_roles('super_admin', 'school_admin'))])
+async def messaging_test(current=Depends(get_current_user),
+                         phone: str = Query(...), channel: str = Query('sms'),
+                         body: str = Query('Test message from Stanvard School ERP')):
+    if not TWILIO_CONFIGURED:
+        raise HTTPException(503, 'Twilio is not configured')
+    to = _normalize_phone(phone)
+    if not to:
+        raise HTTPException(400, 'Invalid phone number')
+    res = await _twilio_send(to, body, 'whatsapp' if channel == 'whatsapp' else 'sms')
+    await message_logs_col.insert_one({
+        'id': new_id(), 'school_id': current.get('school_id'), 'channel': channel,
+        'to': to, 'body': body, 'ok': res['ok'], 'sid': res.get('sid'),
+        'status': res.get('status'), 'error': res.get('error'), 'kind': 'test',
+        'sent_by': current.get('id'), 'created_at': now_iso(),
+    })
+    if not res['ok']:
+        # Return 200 with ok:false so the UI/caller gets a clean JSON error
+        # (a 502 would be intercepted by the ingress and served as HTML).
+        return {'ok': False, 'error': res['error'], 'to': to, 'channel': channel}
+    return res
+
+
 # ------------ Mount router & middlewares ------------
 app.include_router(api)
 
@@ -4271,6 +4460,7 @@ async def startup():
     await attendance_col.create_index([('school_id', 1), ('date', 1), ('class_id', 1)])
     await exams_col.create_index([('school_id', 1), ('class_id', 1)])
     await marks_col.create_index([('exam_id', 1), ('student_id', 1)], unique=True)
+    await message_logs_col.create_index([('school_id', 1), ('created_at', -1)])
     try:
         await _ensure_owner_accounts()
     except Exception as e:

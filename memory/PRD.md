@@ -68,6 +68,13 @@ Multi-school ERP (React + FastAPI + MongoDB) for the Stanvard school group: stud
 - Verified live: order creation returns real Razorpay order ids (order_TReqd...), mock:false, live key_id; checkout.js already loaded in public/index.html; verify endpoint uses the live secret.
 - PENDING (user action): set a webhook secret in Razorpay Dashboard → Settings → Webhooks for the production domain's /api/payments/razorpay/webhook and share it to add as RAZORPAY_WEBHOOK_SECRET.
 - Verified (iteration_15): live orders (order_TReu...), mock:false, fabricated signatures rejected 400, real checkout iframe opens with live key. New suite: tests/test_razorpay_live.py. Stale mock-mode test updated to assert live mode.
+
+## Implemented (2026-08-19, iteration 10) — Twilio SMS + WhatsApp fee reminders
+- Credentials in backend/.env (TWILIO_ACCOUNT_SID/AUTH_TOKEN/PHONE_NUMBER/WHATSAPP_FROM); trial account "My First Twilio Account" verified active via API.
+- Backend: lazy Twilio client, Indian phone normalization (+91 for 10-digit), non-blocking sends via asyncio.to_thread, message_logs collection (every attempt logged), endpoints: GET /api/messaging/status, GET /api/messaging/pending?month=&class_id= (preview), POST /api/messaging/fee-reminders (month + class + channel sms/whatsapp/both), POST /api/messaging/test (200 with ok:false on trial rejection — never leaks HTML 502).
+- Frontend: "Send Reminders" button on Fee Collection page → FeeRemindersDialog (month/class/channel selects, recipient preview, send, per-recipient result summary). Testids: fee-reminders-button, fee-reminders-dialog, reminder-month/class/channel-select, reminder-preview-button, reminder-send-button, reminder-result.
+- Trial limits: SMS only to Twilio-verified numbers; WhatsApp needs sandbox join. Unverified numbers fail gracefully per-recipient without blocking others.
+- Verified (iteration_16): 12/12 new Twilio tests + 37/38 regression + full dialog UI pass. Polish: 500-recipient cap per send, message_logs index, benign ResizeObserver overlay suppressed in index.js.
 - DEFERRED (needs user sign-off / separate effort): localStorage→httpOnly-cookie auth migration (architectural, touches live auth), blanket hook-dependency churn (109 mostly intentional eslint-disabled effects — blind edits risk breaking working flows), large component splits (AssignFeeDialog/Reports/Analytics/FeeCollection/backend_test/pdf_utils), nested-ternary rewrites.
 
 ## Known Notes / Backlog

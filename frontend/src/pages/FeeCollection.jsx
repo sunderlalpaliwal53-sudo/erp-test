@@ -13,7 +13,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { User, Receipt, Trash2, IndianRupee, CalendarDays, CheckCircle2, AlertCircle, Clock, Plus } from 'lucide-react';
+import { User, Receipt, Trash2, IndianRupee, CalendarDays, CheckCircle2, AlertCircle, Clock, Plus, MessageSquare } from 'lucide-react';
+import { FeeRemindersDialog } from '@/components/FeeRemindersDialog';
 import { toast } from 'sonner';
 import { useSchool } from '@/contexts/SchoolContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -55,6 +56,7 @@ export default function FeeCollection() {
   const [awaitingCount, setAwaitingCount] = useState(0);
   const [classes, setClasses] = useState([]);
   const [classFilter, setClassFilter] = useState('all');
+  const [openReminders, setOpenReminders] = useState(false);
 
   const loadAwaitingCount = useCallback(async () => {
     try {
@@ -306,7 +308,12 @@ export default function FeeCollection() {
           {/* STUDENT PICKER */}
           <Card className="p-5 border-border">
             <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-              <Label>Student</Label>
+              <div className="flex items-center gap-2">
+                <Label>Student</Label>
+                <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs" data-testid="fee-reminders-button" onClick={() => setOpenReminders(true)}>
+                  <MessageSquare className="h-3.5 w-3.5" /> Send Reminders
+                </Button>
+              </div>
               <Select value={classFilter} onValueChange={(v) => { setClassFilter(v); if (selected && v !== 'all' && selected.class_id !== v) setStudentId(''); }}>
                 <SelectTrigger className="w-44 h-9" data-testid="fee-collect-class-filter">
                   <SelectValue placeholder="All Classes" />
@@ -598,6 +605,7 @@ export default function FeeCollection() {
           </Card>
         </div>
       </div>
+      <FeeRemindersDialog open={openReminders} onOpenChange={setOpenReminders} classes={classes} />
     </AppShell>
   );
 }

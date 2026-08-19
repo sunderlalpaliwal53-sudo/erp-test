@@ -4,6 +4,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@/index.css";
 import App from "@/App";
 
+// Suppress benign ResizeObserver loop errors that Radix Selects trigger and
+// the CRA dev overlay surfaces as a full-screen error banner (preview only).
+window.addEventListener("error", (e) => {
+  if (e.message && e.message.includes("ResizeObserver loop")) {
+    e.stopImmediatePropagation();
+    e.preventDefault();
+  }
+});
+
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

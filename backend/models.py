@@ -763,3 +763,11 @@ class MarkEntry(BaseModel):
 
 class MarksBulkSave(BaseModel):
     entries: List[MarkEntry]
+
+
+# ---------- TWILIO MESSAGING ----------
+class FeeReminderRequest(BaseModel):
+    month: int  # calendar month number 1-12
+    channel: str = 'sms'  # sms | whatsapp | both
+    class_id: Optional[str] = None
+    school_id: Optional[str] = None
